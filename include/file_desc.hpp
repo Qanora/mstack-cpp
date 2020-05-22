@@ -34,18 +34,17 @@ public:
     }
 
     file_desc(const file_desc&) = delete;
-    file_desc(file_desc&& x)
-        : _fd(x._fd)
+    file_desc(file_desc&& other)
+        : _fd(other._fd)
     {
         x._fd = -1;
     }
 
     file_desc& operator=(const file_desc&) = delete;
-    file_desc& operator=(file_desc&& x)
+    file_desc& operator=(file_desc&& other)
     {
-        if (this != &x) {
-            auto tmp = file_desc(x._fd);
-            std::swap(_fd, tmp._fd);
+        if (this != &other) {
+            std::swap(_fd, other._fd);
         }
         return *this;
     }
@@ -67,6 +66,7 @@ public:
     }
 
 public:
+    int get_fd() { return fd; }
     template <class X>
     int ioctl(int request, X& data)
     {

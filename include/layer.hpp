@@ -1,35 +1,41 @@
 #include <functional>
-#include <glog/logging.h>
 #include <optional>
+#include <string>
 #include <vector>
 
+#include "ethernet.hpp"
+#include "logger.hpp"
+#include "packet.hpp"
+#include "utils.hpp"
 namespace mstack {
 
 class raw_packet {
-    raw_proto proto;
-    buffer payload;
+    using raw_proto = int;
+    raw_proto proto; // TUNTAP_DEV
+    packet payload;
 };
 
 class l2_packet {
-    mac_addr remote_mac_addr;
+    using l2_proto = int;
+    std::optional<mac_addr> remote_mac_addr;
     l2_proto proto;
-    buffer payload;
+    packet payload;
 };
 
-class l3_packet {
-    ip_addr remote_ip_addr;
-    l3_proto proto;
-    buffer payload
-};
+// class l3_packet {
+//     ip_addr remote_ip_addr;
+//     l3_proto proto;
+//     buffer payload
+// };
 
-class l4_packet {
-    ip_addr remote_ip_addr;
-    port remote_port;
-    l4_proto proto;
-    buffer payload;
-};
+// class l4_packet {
+//     ip_addr remote_ip_addr;
+//     port remote_port;
+//     l4_proto proto;
+//     buffer payload;
+// };
 
-template <typname CurrentPacketType>
+template <typename CurrentPacketType>
 class base_hook_funcs {
 public:
     virtual std::optional<protocol_interface>
@@ -50,7 +56,6 @@ public:
 };
 
 template <typename OtherPacketType, typename CurrentPacketType,
-    typename ChildType,
     typename HookFuncs = base_hook_funcs<CurrentPacketType>>
 class layer {
 private:
@@ -131,26 +136,16 @@ public:
     }
 };
 
-class l2_hook : public base_hook_funcs<l2_packet> {
-    struct arpv4_request {
-    };
-    struct arpv4_cache {
-    };
-};
+// class l3_hook : public base_hook_funcs<l3_packet> {
+// public:
+//     struct ipv4_reassemble {
+//     };
+// };
 
-class l2_layer<raw_packet, l2_packet, l2_layer, l2_hook> {
-};
+// class l3_layer<l2_packet, l3_packet, l3_hook> {
+// };
 
-class l3_hook : public base_hook_funcs<l3_packet> {
-public:
-    struct ipv4_reassemble {
-    };
-};
-
-class l3_layer<l2_packet, l3_packet, l3_layer, l3_hook> {
-};
-
-class l4_layer<l3_packet, l4_packet, l4_layer> {
-};
+// class l4_layer<l3_packet, l4_packet> {
+// };
 
 }; // namespace mstack
