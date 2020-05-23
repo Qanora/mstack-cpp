@@ -1,15 +1,20 @@
+#pragma once
 #include <functional>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "circle_buffer.hpp"
 #include "ethernet.hpp"
 #include "logger.hpp"
 #include "packet.hpp"
+#include "protocol.hpp"
 #include "utils.hpp"
+
 namespace mstack {
 
 class raw_packet {
+public:
     using raw_proto = int;
     raw_proto proto; // TUNTAP_DEV
     packet payload;
@@ -38,10 +43,10 @@ class l2_packet {
 template <typename CurrentPacketType>
 class base_hook_funcs {
 public:
-    virtual std::optional<protocol_interface>
-    hook_register(std::optional<protocol_interface> protocol)
+    virtual std::optional<protocol_interface<CurrentPacketType>>
+    hook_register(std::optional<protocol_interface<CurrentPacketType>> protocol)
     {
-        return protocol
+        return protocol;
     }
     virtual std::optional<CurrentPacketType>
     hook_dispatch(std::optional<CurrentPacketType> packet)
@@ -59,23 +64,38 @@ template <typename OtherPacketType, typename CurrentPacketType,
     typename HookFuncs = base_hook_funcs<CurrentPacketType>>
 class layer {
 private:
-    using packet_provider_type = std::function<optional<OtherPacketType>()>;
-    using packet_receiver_type = std::function<optional<(CurrentPacketType)>>;
-    unordered_map<int, packet_receiver_type> _protocols;
-    vector<packet_provider_type> _packet_providers;
+    using packet_provider_type = std::function<std::optional<OtherPacketType>(void)>;
+    using packet_receiver_type = std::function<void(CurrentPacketType)>;
+    std::unordered_map<int, packet_receiver_type> _protocols;
+    std::vector<packet_provider_type> _packet_providers;
     circle_buffer<CurrentPacketType> packet_queue;
     HookFuncs hook_funcs;
 
+private:
+    layer() = default;
+    ~layer() = default;
+
 public:
+    layer(const layer&) = delete;
+    layer(layer&&) = delete;
+    layer& operator=(const layer&) = delete;
+    layer& operator=(layer&&) = delete;
+
+    static layer& instance()
+    {
+        static layer instance;
+        return instance;
+    }
+
     void register_packet_privder(protocol_interface<CurrentPacketType> protocol)
     {
 
-        std::optional<protocol_interface<CurrentPacketType>> protocol = this->hook_funcs.hook_register(protocol);
-        if (!protocol)
+        std::optional<protocol_interface<CurrentPacketType>> protocol_ = this->hook_funcs.hook_register(protocol);
+        if (!protocol_)
             return;
 
-        this->_packet_provider.push_back((*protocols).gather_packet);
-        _protocols[protocols->proto] = (*protocols).receive;
+        this->_packet_provider.push_back([&protocol_]() { return protocol_->gather_packet(); });
+        _protocols[protocol_->proto] = [&protocol_](CurrentPacketType packet) { protocol_->receive(packet); };
     }
 
     void receive(OtherPacketType packet)
@@ -84,17 +104,18 @@ public:
         std::optional<int> proto = get_proto<CurrentPacketType>(packet);
 
         if (!proto) {
-            LOG(INFO) << "[UNKNOWN PACKET]" return;
-        }
-        if (this->_protocols.find(proto) == this->_protocols.end()) {
-            LOG(INFO) << "[UNKNOWN PROTOCOL]";
+            DLOG(INFO) << "[UNKNOWN PACKET]";
             return;
         }
-        std::optional<CurrentPacketType> packet = make_packet<CurrentPacketType>(packet);
+        if (this->_protocols.find(proto) == this->_protocols.end()) {
+            DLOG(INFO) << "[UNKNOWN PROTOCOL]";
+            return;
+        }
+        std::optional<CurrentPacketType> packet_ = make_packet<CurrentPacketType>(packet);
 
-        std::optional<CurrentPacketType> packet = this->hook_funcs.hook_dispatch(packet);
+        packet_ = this->hook_funcs.hook_dispatch(packet_);
 
-        this->_dispatch(packet);
+        this->_dispatch(packet_);
     }
 
     void _dispatch(std::optional<CurrentPacketType> packet)

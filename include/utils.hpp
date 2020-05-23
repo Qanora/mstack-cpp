@@ -11,6 +11,10 @@ namespace util {
 
     static int init_logger(int argc, char* argv[])
     {
+        FLAGS_logtostderr = true;
+        FLAGS_minloglevel = 0;
+        FLAGS_colorlogtostderr = true;
+
         gflags::ParseCommandLineFlags(&argc, &argv, true);
         google::InitGoogleLogging(argv[0]);
     }
@@ -27,7 +31,7 @@ namespace util {
     inline static int run_cmd(std::string fmt, A&&... a)
     {
         std::string cmd = format(fmt, std::forward<A>(a)...);
-        LOG(INFO) << "[EXEC COMMAND]: " << cmd;
+        DLOG(INFO) << "[EXEC COMMAND]: " << cmd;
         return system(cmd.c_str());
     }
 

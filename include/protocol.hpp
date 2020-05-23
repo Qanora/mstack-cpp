@@ -1,7 +1,9 @@
 
+#pragma once
+#include "circle_buffer.hpp"
 namespace mstack {
 
-template <CurrentPacketType>
+template <typename CurrentPacketType>
 class protocol_interface {
 public:
     circle_buffer<CurrentPacketType> packet_queue;
@@ -17,20 +19,11 @@ public:
         packet_queue.pop_front();
         return packet;
     }
-}
+};
 
-template <CurrentPacketType>
-std::optional<int> get_proto(CurrentPacketType packet)
+template <typename CurrentPacketType>
+int get_proto(CurrentPacketType packet)
 {
-    return;
+    return 0;
 }
-
-template <CurrentPacketType, OtherPacketType>
-std::optional<CurrentPacketType> make_packet(OtherPacketType packet)
-{
-    return;
-}
-
-} // namespace mstack
-}
-;
+}; // namespace mstack

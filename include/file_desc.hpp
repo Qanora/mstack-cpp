@@ -37,7 +37,7 @@ public:
     file_desc(file_desc&& other)
         : _fd(other._fd)
     {
-        x._fd = -1;
+        other._fd = -1;
     }
 
     file_desc& operator=(const file_desc&) = delete;
@@ -60,19 +60,19 @@ public:
     {
         int fd = ::open(name.c_str(), flags);
         if (fd == -1) {
-            LOG(ERROR) << "[OPEN FAIL] " << name << " " << strerror(errno);
+            DLOG(ERROR) << "[OPEN FAIL] " << name << " " << strerror(errno);
         }
         return from_fd(fd);
     }
 
 public:
-    int get_fd() { return fd; }
+    int get_fd() { return _fd; }
     template <class X>
     int ioctl(int request, X& data)
     {
         int err = ::ioctl(_fd, request, &data);
         if (err < 0) {
-            LOG(ERROR) << "[IOCTL FAIL] " << strerror(errno);
+            DLOG(ERROR) << "[IOCTL FAIL] " << strerror(errno);
         }
         return err;
     }

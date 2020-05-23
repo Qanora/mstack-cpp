@@ -1,33 +1,34 @@
 #pragma once
 
 #include "defination.hpp"
-#include "device.hpp"
+// #include "device.hpp"
 #include "file_desc.hpp"
+#include "layer.hpp"
 #include "utils.hpp"
 
-#include <optional>
-
-#include <linux/if.h>
+#include <functional>
 #include <linux/if_tun.h>
 #include <net/if.h>
+#include <optional>
 #include <poll.h>
 #include <sys/ioctl.h>
 
 namespace mstack {
 namespace device {
+    template <int mtu>
     class tuntap {
     private:
-        std::optional<file_desc> fd;
-        std::string dev_name = "tap0";
-        constexpr int mtu = 1500;
-        bool available = false;
-        char[mtu] buf;
+        std::optional<file_desc> _fd;
+        std::string _dev_name = "tap0";
+        const int _mtu = mtu;
+        bool _available = false;
+        char _buf[mtu];
 
-        using packet_provider_type = std::function<optional<raw_packet>()>;
-        using packet_receiver_type = std::function<(raw_packet)>> ;
+        using packet_provider_type = std::function<std::optional<raw_packet>(void)>;
+        using packet_receiver_type = std::function<void(raw_packet)>;
 
-        std::optional<packet_provider_type> provider_func;
-        std::optional<packet_receiver_type> receiver_func;
+        std::optional<packet_provider_type> _provider_func;
+        std::optional<packet_receiver_type> _receiver_func;
 
     private:
         ~tuntap() = default;
@@ -52,111 +53,116 @@ namespace device {
     private:
         void init()
         {
-            fd = file_desc::open("/dev/net/tun", file_desc::RDWR | file_desc::NONBLOCK);
-            if (!fd) {
-                LOG(ERROR) << "[INIT FAIL] ";
+            _fd = std::move(file_desc::open("/dev/net/tun", file_desc::RDWR | file_desc::NONBLOCK));
+            if (!_fd) {
+                LOG(FATAL) << "[INIT FAIL] ";
                 return;
             }
             struct ifreq ifr;
             ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
-            strcpy(ifr.ifr_ifrn.ifrn_name, dev_name.c_str());
+            strcpy(ifr.ifr_ifrn.ifrn_name, _dev_name.c_str());
 
-            int err = fd->ioctl(TUNSETIFF, ifr);
+            int err = _fd->ioctl(TUNSETIFF, ifr);
 
             if (err < 0) {
-                LOG(ERROR) << "[INIT FAIL] ";
+                LOG(FATAL) << "[INIT FAIL] ";
                 return;
             }
 
-            if (util::set_interface_up(dev_name) != 0) {
-                LOG(ERROR) << "[SET UP] ";
+            if (util::set_interface_up(_dev_name) != 0) {
+                LOG(FATAL) << "[SET UP] ";
                 return;
             }
-
-            available = true;
+            util::set_interface_route(_dev_name, "192.168.1.0/24");
+            _available = true;
         }
 
     public:
-        bool is_available() { return available; }
+        bool is_available() { return _available; }
 
         void register_provider_func(packet_provider_type func)
         {
-            provider_func = func;
+            _provider_func = func;
         }
         void register_receiver_func(packet_receiver_type func)
         {
-            receiver_func = func;
+            _receiver_func = func;
         }
 
-        l2_packet encode_raw_packet(char* buf, int len)
+        raw_packet encode_raw_packet(char* buf, int len)
         {
-            raw_packet raw_packet;
-            raw_packet.proto = TUNTAP_DEV;
-            raw_packet.payload = std::move(packet(buf, len));
+            raw_packet raw_packet = { TUNTAP_DEV, std::move(packet(buf, len)) };
+            return raw_packet;
         }
 
-        void decode_raw_packet(raw_packet raw_packet, char* buf, int& len)
+        void decode_raw_packet(raw_packet& raw_packet, char* buf, int& len)
         {
             if (raw_packet.proto != TUNTAP_DEV) {
-                LOG(ERROR) << "NO TUNTAP DEV";
+                DLOG(ERROR) << "[NO TUNTAP DEV]";
                 return;
             }
-            raw_packet.payload.export(buf, len);
+            raw_packet.payload.export_data(buf, len);
         }
 
         void run()
         {
 
-            if (!fd) {
-                LOG(ERROR) << "[FILE DESC FAIL]";
+            if (!_fd) {
+                LOG(FATAL) << "[FILE DESC FAIL]";
                 return;
             }
 
-            int base_fd = fd->get_fd();
+            int base_fd = _fd->get_fd();
 
             if (base_fd < 0) {
-                LOG(ERROR) << "[BASE FILE DESC FAIL]" return;
+                LOG(FATAL) << "[BASE FILE DESC FAIL]";
+                return;
             }
 
-            strcut pollfd pollevent[1];
+            struct pollfd pollevent[1];
 
             pollevent[0].fd = base_fd;
 
             pollevent[0].events = POLLIN | POLLOUT;
 
+            DLOG(INFO) << "[TUNTAP LOOP]";
             while (is_available()) {
 
-                int ret = poll(&pollevent, 1, -1);
+                int ret = poll(pollevent, 1, -1);
                 if (ret == -1) {
-                    LOG(ERROR) << "[POLL FAIL]" return;
+                    LOG(FATAL) << "[POLL FAIL]";
+                    return;
                 }
 
                 if (pollevent[0].revents & POLLOUT) {
-                    if (provider_func) {
+                    if (_provider_func) {
 
-                        raw_packet raw_packet = provider_func();
+                        std::optional<raw_packet> raw_packet = _provider_func.value()();
 
                         if (raw_packet) {
 
-                            int len = mtu;
+                            int len = _mtu;
 
-                            decode_raw_packet(raw_packet, buf, len);
+                            decode_raw_packet(raw_packet.value(), _buf, len);
 
-                            write(pollevent[0].fd, buf, len);
+                            write(pollevent[0].fd, _buf, len);
                         }
                     }
                 }
 
                 if (pollevent[0].revents & POLLIN) {
-                    if (receiver_func) {
 
-                        int len = mtu;
+                    if (_receiver_func) {
 
-                        n = read(pollevent[0].fd, buf, len);
+                        int len = _mtu;
 
-                        raw_packet raw_packet = encode_raw_packet(buf, len);
+                        int n = read(pollevent[0].fd, _buf, len);
 
-                        receiver_func(raw_packet);
+                        DLOG(INFO) << "[TUNTAP RECEIVE] " << n;
+
+                        raw_packet raw_packet = encode_raw_packet(_buf, n);
+
+                        _receiver_func.value()(std::move(raw_packet));
                     }
                 }
             }
