@@ -49,5 +49,23 @@ namespace util {
     {
         return run_cmd("ip link set dev %s up", dev);
     }
+
+
+    uint32_t ntoh(uint32_t value){
+        return (value & 0x000000FFU) << 24 | (value & 0x0000FF00U) << 8 | 
+                (value & 0x00FF0000U) >> 8 | (value & 0xFF000000U) >> 24; 
+    }
+
+    uint16_t ntoh(uint16_t value){
+        return (value & 0x00FF) << 8 | (value & 0xFF00) >> 8;
+    }
+
+    std::string print_mm(uint8_t* ptr, int len){
+        std::ostringstream os;
+        for(int i = 0; i < len; i++){
+            os << format("%02X", *(ptr + i));
+        }
+        return os.str();
+    }
 }; // namespace util
 };

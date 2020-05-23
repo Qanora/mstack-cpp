@@ -2,6 +2,7 @@
 
 #include "defination.hpp"
 // #include "device.hpp"
+#include "ethernet.hpp"
 #include "file_desc.hpp"
 #include "layer.hpp"
 #include "utils.hpp"
@@ -19,6 +20,7 @@ namespace device {
     class tuntap {
     private:
         std::optional<file_desc> _fd;
+        std::optional<mac_addr> _mac_addr;
         std::string _dev_name = "tap0";
         const int _mtu = mtu;
         bool _available = false;
@@ -73,11 +75,31 @@ namespace device {
                 LOG(FATAL) << "[SET UP] ";
                 return;
             }
+            get_mac_addr();
+
+            DLOG(INFO) << "[INIT MAC] " << _mac_addr.value();
+
             util::set_interface_route(_dev_name, "192.168.1.0/24");
             _available = true;
         }
 
     public:
+        mac_addr get_mac_addr() {
+            if(_mac_addr) return _mac_addr.value();
+            
+            struct ifreq ifr;
+            strcpy(ifr.ifr_name, _dev_name.c_str());
+            int err = _fd->ioctl(SIOCGIFHWADDR, ifr);
+            if (err < 0) {
+                LOG(FATAL) << "[MAC FAIL]";
+            }
+            uint8_t m[6];
+            for (int i = 0; i < 6; ++i) {
+                m[i] = ifr.ifr_addr.sa_data[i];
+            }
+            _mac_addr = mac_addr(m);
+        }
+
         bool is_available() { return _available; }
 
         void register_provider_func(packet_provider_type func)
@@ -91,7 +113,7 @@ namespace device {
 
         raw_packet encode_raw_packet(char* buf, int len)
         {
-            raw_packet raw_packet = { TUNTAP_DEV, std::move(packet(buf, len)) };
+            raw_packet raw_packet(TUNTAP_DEV, std::move(std::make_unique<packet>(buf, len)));
             return raw_packet;
         }
 
@@ -101,7 +123,7 @@ namespace device {
                 DLOG(ERROR) << "[NO TUNTAP DEV]";
                 return;
             }
-            raw_packet.payload.export_data(buf, len);
+            raw_packet.payload->export_data(buf, len);
         }
 
         void run()
