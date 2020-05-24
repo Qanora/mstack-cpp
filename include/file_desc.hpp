@@ -26,21 +26,21 @@ public:
     static constexpr int NONBLOCK = O_NONBLOCK;
 
 public:
-    file_desc() = delete;
+    file_desc(): _fd(-1){};
     ~file_desc()
     {
         if (_fd != -1)
             ::close(_fd);
     }
 
-    file_desc(const file_desc&) = delete;
+    file_desc(const file_desc&) = default;
     file_desc(file_desc&& other)
         : _fd(other._fd)
     {
         other._fd = -1;
     }
 
-    file_desc& operator=(const file_desc&) = delete;
+    file_desc& operator=(const file_desc&) = default;
     file_desc& operator=(file_desc&& other)
     {
         if (this != &other) {
@@ -48,7 +48,9 @@ public:
         }
         return *this;
     }
-
+    operator bool() {
+        return _fd != -1;
+    }
 public:
     static std::optional<file_desc> from_fd(int fd)
     {

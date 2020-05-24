@@ -12,31 +12,27 @@
 #include "protocol.hpp"
 #include "utils.hpp"
 #include "defination.hpp"
+#include "ipv4.hpp"
 
 namespace mstack {
 
-class raw_packet {
-public:
-    using raw_proto = uint16_t;
-    static constexpr int tag = RAW_PACKET;
-    raw_proto proto; // TUNTAP_DEV
-    std::unique_ptr<packet> payload;
-    raw_packet(raw_proto pr, std::unique_ptr<packet> pa): proto(pr), payload(std::move(pa)){}
-};
-
-class l2_packet {
-public:
+struct l2_packet {
     using l2_proto = uint16_t;
-    std::optional<mac_addr> _remote_mac_addr;
-    l2_proto _proto;
-    std::unique_ptr<packet> _payload;
     static constexpr int tag = L2_PACKET;
-    l2_packet(std::optional<mac_addr> m, l2_proto pr, std::unique_ptr<packet> pa) : _remote_mac_addr(m), _proto(pr), _payload(std::move(pa)){}
+
+    std::optional<ipv4_addr_t> _remote_ipv4_addr;
+    
+    l2_proto _proto;
+
+    std::unique_ptr<packet> _payload;
+
+    l2_packet(std::optional<ipv4_addr_t> ip, l2_proto pr, std::unique_ptr<packet> pa) : _remote_ipv4_addr(ip), _proto(pr), _payload(std::move(pa)){}
+    
     friend std::ostream& operator<<(std::ostream& out, l2_packet& p)
     {
         out << "remote_mac_addr: ";
-        if(p._remote_mac_addr) {
-            out << *(p._remote_mac_addr);
+        if(p._remote_ipv4_addr) {
+            out << p._remote_ipv4_addr.value();
         } else{
             out << "None";
         }
@@ -45,25 +41,25 @@ public:
     }
 };
 
+struct raw_packet {
+    using raw_proto = uint16_t;
+    static constexpr int tag = RAW_PACKET;
 
-// class l3_packet {
-//     ip_addr remote_ip_addr;
-//     l3_proto proto;
-//     buffer payload
-// };
-
-// class l4_packet {
-//     ip_addr remote_ip_addr;
-//     port remote_port;
-//     l4_proto proto;
-//     buffer payload;
-// };
+    raw_proto _proto; // TUNTAP_DEV
+    std::unique_ptr<packet> _payload;
+    raw_packet(raw_proto pr, std::unique_ptr<packet> pa): _proto(pr), _payload(std::move(pa)){}
+};
 
 template <typename CurrentPacketType>
 class base_hook_funcs {
 public:
+    template<typename DEV>
+    void hook_register_dev(DEV& dev) {
+        return dev;
+    }
+
     virtual void
-    hook_register(protocol_interface<CurrentPacketType>& protocol)
+    hook_register_protocol(protocol_interface<CurrentPacketType>& protocol)
     {
         DLOG(INFO) << "[REGISTER] " << protocol.tag();
     }
@@ -74,10 +70,10 @@ public:
         return packet;
     }
 
-    virtual std::optional<CurrentPacketType>
-    hook_gather(std::optional<CurrentPacketType> packet)
+    template<typename OtherPacketType>
+    std::optional<OtherPacketType> hook_gather(std::optional<CurrentPacketType> packet)
     {
-        return packet;
+        return std::nullopt;
     }
 };
 
@@ -89,7 +85,7 @@ private:
     using packet_receiver_type = std::function<void(CurrentPacketType)>;
     std::unordered_map<int, packet_receiver_type> _protocols;
     std::vector<packet_provider_type> _packet_providers;
-    circle_buffer<CurrentPacketType> packet_queue;
+    circle_buffer<OtherPacketType> packet_queue;
     HookFuncs hook_funcs;
 
 private:
@@ -111,18 +107,21 @@ public:
     template <typename DEV>
     void register_dev(DEV& dev)
     {
+        this->hook_funcs.hook_register_dev(dev);
         dev.register_provider_func([&]() { return std::move(instance().gather_packet()); });
-        dev.register_receiver_func([&](raw_packet raw_packet) { instance().receive(std::move(raw_packet)); });
+        dev.register_receiver_func([&](raw_packet raw_packet) { 
+            instance().receive(std::move(raw_packet)); 
+        });
     }
 
     void register_protocol(protocol_interface<CurrentPacketType>& protocol)
     {
 
-        // std::optional<std::reference_wrapper<protocol_interface<CurrentPacketType>>> 
-        this->hook_funcs.hook_register(protocol);
+        this->hook_funcs.hook_register_protocol(protocol);
 
-        //_packet_providers.push_back([&protocol]() { return protocol.gather_packet(); });
+        _packet_providers.push_back([&protocol]() { return protocol.gather_packet(); });
         _protocols[protocol.proto()] = [&protocol](CurrentPacketType packet) { protocol.receive(std::move(packet)); };
+        DLOG(INFO) << "[REGISTER PROTOCOL] " << protocol.proto();
     }
 
     void receive(OtherPacketType packet)
@@ -170,8 +169,12 @@ public:
         if (this->packet_queue.empty()) {
             for (auto packet_provider : this->_packet_providers) {
                 std::optional<CurrentPacketType> packet = packet_provider();
-                if (!packet) {
-                    packet_queue.push_back(std::move(*packet));
+                if (packet) {
+
+                    std::optional<OtherPacketType> packet_ = this->hook_funcs.hook_gather(packet);
+                    
+                    packet_queue.push_back(std::move(*packet_));
+
                 }
             }
         }
@@ -180,28 +183,14 @@ public:
             return std::nullopt;
         }
 
-        std::optional<CurrentPacketType> packet = packet_queue.pop_front(); 
+        std::optional<OtherPacketType> packet = packet_queue.pop_front(); 
 
-        packet = this->hook_funcs.hook_gather(std::move(packet));
         if(!packet){
             return std::nullopt;
-        }
-        std::optional<OtherPacketType> packet_ = make_packet<OtherPacketType>(std::move(*packet));      
+        }  
 
-        return packet_;
+        return packet;
     }
 };
-
-// class l3_hook : public base_hook_funcs<l3_packet> {
-// public:
-//     struct ipv4_reassemble {
-//     };
-// };
-
-// class l3_layer<l2_packet, l3_packet, l3_hook> {
-// };
-
-// class l4_layer<l3_packet, l4_packet> {
-// };
 
 }; // namespace mstack

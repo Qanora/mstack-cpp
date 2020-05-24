@@ -7,8 +7,8 @@ namespace mstack {
 
 class packet {
 private:
-    std::vector<std::pair<int, std::unique_ptr<char[]>>> _data_stack;
-    std::unique_ptr<char[]> _raw_data;
+    std::vector<std::pair<int, std::unique_ptr<uint8_t[]>>> _data_stack;
+    std::unique_ptr<uint8_t[]> _raw_data;
 public:
     int _data_stack_len;
     int _head;
@@ -16,56 +16,38 @@ public:
 
 public:
     packet(char* buf, int len)
-        : _raw_data(std::make_unique<char[]>(len))
+        : _raw_data(std::make_unique<uint8_t[]>(len))
         , _head(0)
         , _len(len)
     {
         std::copy(buf, buf + len, _raw_data.get());
     }
-    packet(int len)
-        : _raw_data(std::make_unique<char[]>(len))
+
+    template <typename HeaderType>
+    packet()
+        : _raw_data(std::make_unique<uint8_t[]>(sizeof(HeaderType)))
         , _head(0)
-        , _len(len)
+        , _len(sizeof(HeaderType))
     {
     }
     
     ~packet() = default;
     packet(packet&) = delete;
-    packet(packet&& other)
-    {
-        _raw_data = std::move(other._raw_data);
-        std::swap(_head, other._head);
-        std::swap(_len, other._len);
-        std::swap(_data_stack_len, other._data_stack_len);
-    }
+    packet(packet&&) = delete;
     packet& operator=(packet&) = delete;
-    packet& operator=(packet&& other)
-    {
-        _raw_data = std::move(other._raw_data);
-        std::swap(_head, other._head);
-        std::swap(_len, other._len);
-        std::swap(_data_stack_len, other._data_stack_len);
-    }
+    packet& operator=(packet&&) = delete;
 
 public:
-    template<typename HeaderType>
-    HeaderType* get_header(){
-        char* pointer = _raw_data.get() + _head;
-        return reinterpret_cast<HeaderType*>(pointer);
-    }
 
-    template<typename HeaderType>
-    char* get_option(){
-        char* pointer = _raw_data.get() + _head + sizeof(HeaderType);
-        return pointer;
+    uint8_t* get_pointer(){
+        return _raw_data.get() + _head;
     }
 
 
-    template<typename HeaderType, int options_len>
-    void add_offset() {
-        int offset = sizeof(HeaderType) + options_len;
+    void add_offset(int offset) {
         _head += offset;
     }
+
 
     void reflush_packet(int len)
     {
@@ -74,7 +56,7 @@ public:
 
         _head = 0;
         _len = len;
-        _raw_data = std::make_unique<char[]>(len);
+        _raw_data = std::make_unique<uint8_t[]>(len);
     }
 
     void export_data(char* buf, int& len)
@@ -100,15 +82,4 @@ std::optional<To> make_packet(From packet)
     DLOG(ERROR) << "[UNKNOW PACKET] " << From::tag << "->" << To::tag;
     return std::nullopt;
 }
-
-
-// template <>
-// l2_packet make_packet(raw_packet in_packet)
-// {
-// }
-
-// template <>
-// raw_packet make_packet(l2_packet, in_packet)
-// {
-// }
 }

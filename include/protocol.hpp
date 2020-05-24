@@ -15,12 +15,11 @@ private:
     //   protocol_interface& operator=(protocol_interface&&) = default;  
 public:
     circle_buffer<CurrentPacketType> packet_queue;
-    virtual std::string tag(){
-        return "NULL";
+    virtual int proto(){
+        return 0x0000;
     }
-    virtual int proto() {
-        DLOG(ERROR) << "[NULL PROTO]";
-        return 0;
+    virtual std::string tag() {
+        return "NULL PROTO";
     }
     virtual void receive(CurrentPacketType packet){
         return;

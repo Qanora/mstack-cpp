@@ -60,6 +60,24 @@ namespace util {
         return (value & 0x00FF) << 8 | (value & 0xFF00) >> 8;
     }
 
+    uint8_t ntoh(uint8_t value){
+        return value;
+    }
+
+    template <typename T>
+    inline T consume(uint8_t*& ptr) {
+        T ret = *(reinterpret_cast<T*>(ptr));
+        ptr += sizeof(T);
+        return ntoh(ret);
+    }
+
+    template <typename T>
+    inline void produce(uint8_t*& p, T& t) {
+        T* ptr_ = reinterpret_cast<T*>(t);
+        *ptr_ = ntoh(t);
+        p += sizeof(T);
+    }
+
     std::string print_mm(uint8_t* ptr, int len){
         std::ostringstream os;
         for(int i = 0; i < len; i++){

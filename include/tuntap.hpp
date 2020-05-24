@@ -1,11 +1,10 @@
 #pragma once
 
 #include "defination.hpp"
-// #include "device.hpp"
-#include "ethernet.hpp"
 #include "file_desc.hpp"
-#include "layer.hpp"
 #include "utils.hpp"
+#include "layer.hpp"
+#include "ethernet.hpp"
 
 #include <functional>
 #include <linux/if_tun.h>
@@ -14,17 +13,25 @@
 #include <poll.h>
 #include <sys/ioctl.h>
 
+
 namespace mstack {
-namespace device {
-    template <int mtu>
+
+
+
+    template <int mtu, int hw_type, int hw_size>
     class tuntap {
+    public:
+        constexpr static int HW_TYPE = hw_type;
+        constexpr static int HW_SIZE = hw_size;
+        constexpr static int MTU = mtu;
+        constexpr static int TAG = TUNTAP_DEV;
     private:
-        std::optional<file_desc> _fd;
-        std::optional<mac_addr> _mac_addr;
+        file_desc _fd;
+        std::array<uint8_t, HW_SIZE> _hw_addr;
         std::string _dev_name = "tap0";
-        const int _mtu = mtu;
+
         bool _available = false;
-        char _buf[mtu];
+        char _buf[MTU];
 
         using packet_provider_type = std::function<std::optional<raw_packet>(void)>;
         using packet_receiver_type = std::function<void(raw_packet)>;
@@ -52,19 +59,47 @@ namespace device {
             return instance;
         }
 
+        operator bool(){
+            return _available;
+        }
+
     private:
+        void set_hw_addr() {
+            
+            struct ifreq ifr;
+
+            strcpy(ifr.ifr_name, _dev_name.c_str());
+
+            int err = _fd.ioctl(SIOCGIFHWADDR, ifr);
+
+            if (err < 0) {
+                LOG(FATAL) << "[HW FAIL]";
+            }
+
+            for (int i = 0; i < 6; ++i) {
+                _hw_addr[i] = ifr.ifr_addr.sa_data[i];
+            }
+        }
+
         void init()
         {
-            _fd = std::move(file_desc::open("/dev/net/tun", file_desc::RDWR | file_desc::NONBLOCK));
-            if (!_fd) {
+            auto fd = std::move(file_desc::open("/dev/net/tun", file_desc::RDWR | file_desc::NONBLOCK));
+            if (!fd) {
                 LOG(FATAL) << "[INIT FAIL] ";
                 return;
             }
+
+            // ? something error
+            _fd = std::move(fd.value());
+            
+            DLOG(INFO) << "[DEV FD] " << _fd.get_fd();
+
             struct ifreq ifr;
+
             ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
             strcpy(ifr.ifr_ifrn.ifrn_name, _dev_name.c_str());
 
-            int err = _fd->ioctl(TUNSETIFF, ifr);
+            int err = _fd.ioctl(TUNSETIFF, ifr);
 
             if (err < 0) {
                 LOG(FATAL) << "[INIT FAIL] ";
@@ -75,40 +110,13 @@ namespace device {
                 LOG(FATAL) << "[SET UP] ";
                 return;
             }
-            get_mac_addr();
 
-            DLOG(INFO) << "[INIT MAC] " << _mac_addr.value();
+            set_hw_addr();
+
+            DLOG(INFO) << "[INIT MAC] " << mac_addr_t(_hw_addr);
 
             util::set_interface_route(_dev_name, "192.168.1.0/24");
             _available = true;
-        }
-
-    public:
-        mac_addr get_mac_addr() {
-            if(_mac_addr) return _mac_addr.value();
-            
-            struct ifreq ifr;
-            strcpy(ifr.ifr_name, _dev_name.c_str());
-            int err = _fd->ioctl(SIOCGIFHWADDR, ifr);
-            if (err < 0) {
-                LOG(FATAL) << "[MAC FAIL]";
-            }
-            uint8_t m[6];
-            for (int i = 0; i < 6; ++i) {
-                m[i] = ifr.ifr_addr.sa_data[i];
-            }
-            _mac_addr = mac_addr(m);
-        }
-
-        bool is_available() { return _available; }
-
-        void register_provider_func(packet_provider_type func)
-        {
-            _provider_func = func;
-        }
-        void register_receiver_func(packet_receiver_type func)
-        {
-            _receiver_func = func;
         }
 
         raw_packet encode_raw_packet(char* buf, int len)
@@ -119,11 +127,26 @@ namespace device {
 
         void decode_raw_packet(raw_packet& raw_packet, char* buf, int& len)
         {
-            if (raw_packet.proto != TUNTAP_DEV) {
+            if (raw_packet._proto != TUNTAP_DEV) {
                 DLOG(ERROR) << "[NO TUNTAP DEV]";
                 return;
             }
-            raw_packet.payload->export_data(buf, len);
+            raw_packet._payload->export_data(buf, len);
+        }
+        
+    public:
+
+        std::array<uint8_t, HW_SIZE> get_hw_addr(){
+            return _hw_addr;
+        }
+
+        void register_provider_func(packet_provider_type func)
+        {
+            _provider_func = func;
+        }
+        void register_receiver_func(packet_receiver_type func)
+        {
+            _receiver_func = func;
         }
 
         void run()
@@ -134,7 +157,7 @@ namespace device {
                 return;
             }
 
-            int base_fd = _fd->get_fd();
+            int base_fd = _fd.get_fd();
 
             if (base_fd < 0) {
                 LOG(FATAL) << "[BASE FILE DESC FAIL]";
@@ -148,8 +171,8 @@ namespace device {
             pollevent[0].events = POLLIN | POLLOUT;
 
             DLOG(INFO) << "[TUNTAP LOOP]";
-            while (is_available()) {
-
+            while (_available) {
+                
                 int ret = poll(pollevent, 1, -1);
                 if (ret == -1) {
                     LOG(FATAL) << "[POLL FAIL]";
@@ -163,20 +186,21 @@ namespace device {
 
                         if (raw_packet) {
 
-                            int len = _mtu;
+                            int len = MTU;
 
                             decode_raw_packet(raw_packet.value(), _buf, len);
 
                             write(pollevent[0].fd, _buf, len);
                         }
+                    } else {
+                        LOG(FATAL) << "[NO PROVIDER FUNC]";
                     }
                 }
-
                 if (pollevent[0].revents & POLLIN) {
-
+                    
                     if (_receiver_func) {
 
-                        int len = _mtu;
+                        int len = MTU;
 
                         int n = read(pollevent[0].fd, _buf, len);
 
@@ -185,10 +209,11 @@ namespace device {
                         raw_packet raw_packet = encode_raw_packet(_buf, n);
 
                         _receiver_func.value()(std::move(raw_packet));
+                    } else {
+                        LOG(FATAL) << "[NO RECEIVER FUNC]";
                     }
                 }
             }
         }
     };
-}; // namespace device
 } // namespace mstack

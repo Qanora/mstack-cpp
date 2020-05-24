@@ -3,14 +3,14 @@
 #include "tuntap.hpp"
 #include "utils.hpp"
 #include "l2_layer.hpp"
-#include "ipv4.hpp"
+//#include "ipv4.hpp"
 #include "arp.hpp"
 int main(int argc, char* argv[])
 {
 
     mstack::util::init_logger(argc, argv);
 
-    using tuntap = mstack::device::tuntap<1500>;
+    using tuntap = mstack::tuntap<1500, 0x0001, 0x06>;
 
     auto &tuntap_dev = tuntap::instance();
     
