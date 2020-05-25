@@ -1,9 +1,7 @@
 #pragma once
 
-#include <iostream>
 #include <optional>
-
-#include <glog/logging.h>
+#include "logger.hpp"
 
 #include <fcntl.h>
 #include <sys/ioctl.h>

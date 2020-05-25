@@ -1,11 +1,10 @@
 #pragma once
-#include "layer.hpp"
-#include "tuntap.hpp"
-#include "ethernet.hpp"
-#include <array>
-#include <iomanip>
 #include <optional>
-#include <unordered_map>
+
+#include "layer.hpp"
+#include "mac_addr.hpp"
+#include "ipv4_addr.hpp"
+
 #include "arp.hpp"
 
 namespace mstack {
@@ -56,7 +55,7 @@ std::optional<l2_packet> make_packet(raw_packet in_packet) {
 
     eth_hdr.consume(ptr);
 
-    DLOG(INFO) << "[ETHERNET PACKET] " << eth_hdr;
+    DLOG(INFO) << eth_hdr;
 
     in_packet._payload->add_offset(ethernet_header_t::size());
 
@@ -66,7 +65,7 @@ std::optional<l2_packet> make_packet(raw_packet in_packet) {
 template <>
 std::optional<int> get_proto(std::optional<l2_packet>& packet)
 {
-    // DLOG(INFO) << "[PROTO L2_PACKET] " << std::setiosflags(std::ios::uppercase) << std::hex << packet->_proto;
+    DLOG(INFO) << "[PROTO L2_PACKET] " << std::setiosflags(std::ios::uppercase) << std::hex << packet->_proto;
     return packet->_proto;
 }
 

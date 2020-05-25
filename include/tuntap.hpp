@@ -3,8 +3,9 @@
 #include "defination.hpp"
 #include "file_desc.hpp"
 #include "utils.hpp"
-#include "layer.hpp"
-#include "ethernet.hpp"
+#include "ipv4_addr.hpp"
+#include "mac_addr.hpp"
+#include "packets.hpp"
 
 #include <functional>
 #include <linux/if_tun.h>

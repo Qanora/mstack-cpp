@@ -1,11 +1,8 @@
 #pragma once
-#include <ios>
 #include <memory>
 #include "protocol.hpp"
-#include "layer.hpp"
 #include "ethernet.hpp"
-#include "ipv4.hpp"
-
+#include "packets.hpp"
 namespace mstack{
 
     struct arpv4_header_t{
@@ -50,10 +47,9 @@ namespace mstack{
 
     std::ostream& operator<<(std::ostream& out, arpv4_header_t& m)
     {
-        using u = uint32_t;
-        out << "OP: " << m.opcode << " ";
-        out << "LOCAL: " << mac_addr_t(m.dst_mac_addr) <<", " << ipv4_addr_t(m.dst_ip_addr);
-        out << " REMOTE: " << mac_addr_t(m.src_mac_addr) <<", " << ipv4_addr_t(m.src_ip_addr);
+        out << m.opcode << " ";
+        out << m.src_mac_addr << " " << m.src_ip_addr;
+        out << " -> " << m.dst_mac_addr << " " << m.dst_ip_addr;
         return out;
     }
 
@@ -84,7 +80,6 @@ namespace mstack{
         }
 
         void make_response_packet(arpv4_header_t& in_header) {
-
             std::unique_ptr<packet> out_packet = std::make_unique<packet>(arpv4_header_t::size());
 
             struct arpv4_header_t arp_header;
@@ -177,7 +172,7 @@ namespace mstack{
                 out_arp_header.src_ip_addr = dev_ipv4_addr.value();
 
                 out_arp_header.produce(in_packet->_payload->get_pointer());
-                DLOG(INFO) << "[END ARP HOOK] " << out_arp_header ;
+                DLOG(INFO) << "[END   ARP HOOK] " << out_arp_header ;
                 in_packet->_payload->reflush_packet(ethernet_header_t::size());
 
                 struct ethernet_header_t eth_header;

@@ -5,80 +5,17 @@
 #include <vector>
 #include <memory>
 #include <iomanip>
+
 #include "circle_buffer.hpp"
-#include "ethernet.hpp"
+#include "mac_addr.hpp"
+#include "ipv4_addr.hpp"
 #include "logger.hpp"
-#include "packet.hpp"
 #include "protocol.hpp"
 #include "utils.hpp"
 #include "defination.hpp"
-#include "ipv4.hpp"
 
 namespace mstack {
 
-struct l2_packet {
-    using l2_proto = uint16_t;
-    static constexpr int tag = L2_PACKET;
-
-    std::optional<ipv4_addr_t> _remote_ipv4_addr;
-    
-    l2_proto _proto;
-
-    std::unique_ptr<packet> _payload;
-
-    l2_packet(std::optional<ipv4_addr_t> ip, l2_proto pr, std::unique_ptr<packet> pa) : _remote_ipv4_addr(ip), _proto(pr), _payload(std::move(pa)){}
-    
-    // l2_packet(l2_packet&) = delete;
-    // l2_packet& operator=(l2_packet&) = delete;
-
-    // l2_packet(l2_packet&& other){
-    //     _payload = std::move(other._payload);
-    //     _remote_ipv4_addr = std::move(other._remote_ipv4_addr);
-    //     _proto = std::move(other._proto);
-    // }
-
-    // l2_packet& operator=(l2_packet&& other){
-    //     _payload = std::move(other._payload);
-    //     _remote_ipv4_addr = std::move(other._remote_ipv4_addr);
-    //     _proto = std::move(other._proto);
-    //     return *this;
-    // }
-
-    friend std::ostream& operator<<(std::ostream& out, l2_packet& p)
-    {
-        out << "REMOTE: ";
-        if(p._remote_ipv4_addr) {
-            out << p._remote_ipv4_addr.value();
-        } else{
-            out << "None ";
-        }
-        out << "PROTO: " <<  std::setiosflags(std::ios::uppercase)<< std::hex << p._proto;
-        return out;
-    }
-};
-
-struct raw_packet {
-    using raw_proto = uint16_t;
-    static constexpr int tag = RAW_PACKET;
-
-    raw_proto _proto; // TUNTAP_DEV
-    std::unique_ptr<packet> _payload;
-
-    // raw_packet& operator=(raw_packet& other) = delete;
-    // raw_packet(raw_packet& other) = delete;
-
-    // raw_packet& operator=(raw_packet&& other){
-    //     _proto = std::move(other._proto);
-    //     _payload = std::move(other._payload);
-    //     return *this;
-    // }
-
-    // raw_packet(raw_packet&& other){
-    //     _proto = std::move(other._proto);
-    //     _payload = std::move(other._payload);
-    // }
-    raw_packet(raw_proto pr, std::unique_ptr<packet> pa): _proto(pr), _payload(std::move(pa)){}
-};
 
 template <typename CurrentPacketType>
 class base_hook_funcs {
@@ -114,11 +51,12 @@ class layer {
 private:
     using packet_provider_type = std::function<std::optional<CurrentPacketType>(void)>;
     using packet_receiver_type = std::function<void(CurrentPacketType)>;
+    
+    std::optional<packet_receiver_type> _forward_to_layer_func;
     std::unordered_map<int, packet_receiver_type> _protocols;
     std::vector<packet_provider_type> _packet_providers;
     circle_buffer<OtherPacketType> packet_queue;
     HookFuncs hook_funcs;
-
 private:
     layer() = default;
     ~layer() = default;
@@ -145,6 +83,11 @@ public:
         });
     }
 
+    template <typename OtherLayer>
+    void register_forward_layer(OtherLayer& layer){
+        _forward_to_layer_func = [&layer](CurrentPacketType packet){ layer.receive(std::move(packet)); };
+    }
+
     void register_protocol(protocol_interface<CurrentPacketType>& protocol)
     {
 
@@ -152,22 +95,31 @@ public:
 
         _packet_providers.push_back([&protocol]() { return protocol.gather_packet(); });
         _protocols[protocol.proto()] = [&protocol](CurrentPacketType packet) { protocol.receive(std::move(packet)); };
+
+        protocol.register_forward_layer([&](CurrentPacketType packet){ this->_dispatch(std::move(packet)); });
         DLOG(INFO) << "[REGISTER PROTOCOL] " << protocol.proto();
+
     }
 
+    
     void receive(OtherPacketType packet)
-    {
-        std::optional<CurrentPacketType> packet_ = make_packet<CurrentPacketType>(std::move(packet));
-        
-        std::optional<int> proto = get_proto<CurrentPacketType>(packet_);
+    {  
 
+        std::optional<CurrentPacketType> packet_ = make_packet<CurrentPacketType>(std::move(packet));
+
+        std::optional<int> proto = get_proto<CurrentPacketType>(packet_);
         if (!proto) {
-            DLOG(ERROR) << "[UNKNOWN PROTO]";
+            DLOG(ERROR) << "[UNKOWN PROTO]";
             return;
         }
 
         if (this->_protocols.find(*proto) == this->_protocols.end()) {
-            DLOG(ERROR) << "[UNKNOWN PROTOCOL] " << std::setiosflags(std::ios::uppercase) << std::hex << *proto;
+            if (_forward_to_layer_func) {
+                DLOG(INFO) << "[FORWARD PACKET] " << std::setiosflags(std::ios::uppercase) << std::hex << packet_->_proto;
+                _forward_to_layer_func.value()(std::move(packet_.value()));
+            } else {
+                DLOG(ERROR) << "[UNKNOWN PROTOCOL] " << std::setiosflags(std::ios::uppercase) << std::hex << *proto;
+            }
             return;
         }
 
@@ -185,13 +137,11 @@ public:
         std::optional<int> proto = get_proto<CurrentPacketType>(packet);
 
         if(!proto) {
-            DLOG(ERROR) << "[DISPATCH FAIL]";
+            DLOG(ERROR) << "[UNKOWN PROTO]";
             return;
         }
-        CHECK(this->_protocols.find(*proto) != this->_protocols.end())
-            << "[UNKNOW PROTCOL]";
 
-        this->_protocols[*proto](std::move(*packet));
+        this->_protocols[*proto](std::move(packet.value()));
     }
 
     std::optional<OtherPacketType> gather_packet()
