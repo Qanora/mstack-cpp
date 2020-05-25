@@ -72,8 +72,8 @@ namespace util {
     }
 
     template <typename T>
-    inline void produce(uint8_t*& p, T& t) {
-        T* ptr_ = reinterpret_cast<T*>(t);
+    inline void produce(uint8_t*& p, T t) {
+        T* ptr_ = reinterpret_cast<T*>(p);
         *ptr_ = ntoh(t);
         p += sizeof(T);
     }

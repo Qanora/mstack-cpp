@@ -30,8 +30,8 @@ public:
         if (this->packet_queue.empty()) {
             return std::nullopt;
         }
-        auto packet = packet_queue.pop_front();
-        return packet;
+        CurrentPacketType packet = std::move(packet_queue.pop_front());
+        return std::make_optional<CurrentPacketType>(std::move(packet));
     }
 };
 

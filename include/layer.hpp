@@ -28,15 +28,31 @@ struct l2_packet {
 
     l2_packet(std::optional<ipv4_addr_t> ip, l2_proto pr, std::unique_ptr<packet> pa) : _remote_ipv4_addr(ip), _proto(pr), _payload(std::move(pa)){}
     
+    // l2_packet(l2_packet&) = delete;
+    // l2_packet& operator=(l2_packet&) = delete;
+
+    // l2_packet(l2_packet&& other){
+    //     _payload = std::move(other._payload);
+    //     _remote_ipv4_addr = std::move(other._remote_ipv4_addr);
+    //     _proto = std::move(other._proto);
+    // }
+
+    // l2_packet& operator=(l2_packet&& other){
+    //     _payload = std::move(other._payload);
+    //     _remote_ipv4_addr = std::move(other._remote_ipv4_addr);
+    //     _proto = std::move(other._proto);
+    //     return *this;
+    // }
+
     friend std::ostream& operator<<(std::ostream& out, l2_packet& p)
     {
-        out << "remote_mac_addr: ";
+        out << "REMOTE: ";
         if(p._remote_ipv4_addr) {
             out << p._remote_ipv4_addr.value();
         } else{
-            out << "None";
+            out << "None ";
         }
-        out << "proto: " << p._proto;
+        out << "PROTO: " <<  std::setiosflags(std::ios::uppercase)<< std::hex << p._proto;
         return out;
     }
 };
@@ -47,6 +63,20 @@ struct raw_packet {
 
     raw_proto _proto; // TUNTAP_DEV
     std::unique_ptr<packet> _payload;
+
+    // raw_packet& operator=(raw_packet& other) = delete;
+    // raw_packet(raw_packet& other) = delete;
+
+    // raw_packet& operator=(raw_packet&& other){
+    //     _proto = std::move(other._proto);
+    //     _payload = std::move(other._payload);
+    //     return *this;
+    // }
+
+    // raw_packet(raw_packet&& other){
+    //     _proto = std::move(other._proto);
+    //     _payload = std::move(other._payload);
+    // }
     raw_packet(raw_proto pr, std::unique_ptr<packet> pa): _proto(pr), _payload(std::move(pa)){}
 };
 
@@ -62,18 +92,19 @@ public:
     hook_register_protocol(protocol_interface<CurrentPacketType>& protocol)
     {
         DLOG(INFO) << "[REGISTER] " << protocol.tag();
+        return;
     }
 
-    virtual std::optional<CurrentPacketType>
-    hook_dispatch(std::optional<CurrentPacketType> packet)
+    virtual void
+    hook_dispatch(std::optional<CurrentPacketType>& packet)
     {
-        return packet;
+        return;
     }
 
     template<typename OtherPacketType>
     std::optional<OtherPacketType> hook_gather(std::optional<CurrentPacketType> packet)
     {
-        return std::nullopt;
+        return std::move(std::nullopt);
     }
 };
 
@@ -140,7 +171,7 @@ public:
             return;
         }
 
-        packet_ = this->hook_funcs.hook_dispatch(std::move(packet_));
+        this->hook_funcs.hook_dispatch(packet_);
 
         this->_dispatch(std::move(packet_));
     }
@@ -170,11 +201,11 @@ public:
             for (auto packet_provider : this->_packet_providers) {
                 std::optional<CurrentPacketType> packet = packet_provider();
                 if (packet) {
-
-                    std::optional<OtherPacketType> packet_ = this->hook_funcs.hook_gather(packet);
+                    std::optional<OtherPacketType> packet_ = this->hook_funcs.hook_gather(std::move(packet));
                     
-                    packet_queue.push_back(std::move(*packet_));
-
+                    if(packet_) {
+                        packet_queue.push_back(std::move(packet_.value()));
+                    }
                 }
             }
         }
@@ -183,13 +214,9 @@ public:
             return std::nullopt;
         }
 
-        std::optional<OtherPacketType> packet = packet_queue.pop_front(); 
+        OtherPacketType packet = std::move(this->packet_queue.pop_front()); 
 
-        if(!packet){
-            return std::nullopt;
-        }  
-
-        return packet;
+        return std::make_optional<OtherPacketType>(std::move(packet));
     }
 };
 

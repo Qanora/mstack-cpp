@@ -12,11 +12,10 @@ public:
     void push_back(PacketType packet){
         packets.push(std::move(packet));
     }
-    std::optional<PacketType> pop_front(){
-        // auto packet = std::move(packets.front());
-        // packets.pop();
-        // return packet.get();
-        return std::nullopt;
+    PacketType pop_front(){
+        auto packet = std::move(packets.front());
+        packets.pop();
+        return std::move(packet);
     }
 };
 }

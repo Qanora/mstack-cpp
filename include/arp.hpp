@@ -59,9 +59,11 @@ namespace mstack{
 
     class arp : public protocol_interface<l2_packet> {
     public:
+        static constexpr int PROTO = 0x0806;
         virtual int proto(){
-            return 0x0806;
+            return PROTO;
         }
+
         virtual std::string tag(){
             return "ARP";
         }
@@ -75,76 +77,121 @@ namespace mstack{
         virtual void receive(l2_packet packet){
             struct arpv4_header_t arp_header;
             arp_header.consume(packet._payload->get_pointer());
-            // DLOG(INFO) << "[ARP RECEIVE] " << arp_header;
             if(arp_header.opcode == 0x0001){
                 DLOG(INFO) << "[ARP REQUEST] " << arp_header;
-                // make_response_packet(arp_header);
+                make_response_packet(arp_header);
             }
-
         }
 
-        // void make_response_packet(arpv4_header_t* in_header) {
+        void make_response_packet(arpv4_header_t& in_header) {
+
+            std::unique_ptr<packet> out_packet = std::make_unique<packet>(arpv4_header_t::size());
+
+            struct arpv4_header_t arp_header;
+
+            arp_header.hw_type = 0x0001;
+            arp_header.proto_type = 0x0800;
+            arp_header.hw_size = 0x06;
+            arp_header.proto_size = 0x04;
+            arp_header.opcode = 0x02;
+
+            //? FIXME avoid move uninit value  
+            arp_header.src_mac_addr = in_header.src_mac_addr;
+            arp_header.src_ip_addr = in_header.src_ip_addr;
 
 
-        //     packet out_packet = packet<arpv4_header_t>();
+            arp_header.dst_mac_addr = in_header.src_mac_addr;
+            arp_header.dst_ip_addr = in_header.src_ip_addr;
 
-        //     struct arpv4_header_t* out_header = out_packet.get_header<arpv4_header_t>();
+            arp_header.produce(out_packet->get_pointer());
 
-        //     out_header->hw_type = 0x0001;
-        //     out_header->proto_type = 0x0800;
-        //     out_header->hw_size = 0x06;
-        //     out_header->proto_size = 0x02;
-        //     out_header->opcode = 0x02
+            l2_packet out_l2_packet = l2_packet(std::nullopt, proto(), std::move(out_packet));
+            DLOG(INFO) << "[ENQUEUE ARP] " << out_l2_packet;
+            packet_queue.push_back(std::move(out_l2_packet));
 
-        //     out_header->src_ip = in_header.dst_ip;
-        //     std::copy(in_header->src_mac, in_header->src_mac + in_header->hw_size, out_packet->dst_mac);
-        //     out_header->dst_ip = in_header.src_ip;
-
-        //     l2_packet out_l2_packet = l2_packet>(in_header->src_mac, PROTO, std::move(out_packet));
-
-        //     packet_queue.push_back(std::move(out_l2_packet));
-
-        // }  
+        }  
     };
 
-    struct arp_hook{
+    struct arp_hook_t{
 
-        std::unordered_map<int, mac_addr_t> hw_addr_map;
+        std::unordered_map<int, mac_addr_t> mac_addr_map;
+        std::unordered_map<int, ipv4_addr_t> ipv4_addr_map;
 
         template<typename DEV>
         void add(DEV& dev) {
-            std::array<uint8_t, DEV::HW_SIZE> hw_addr = dev.get_hw_addr(); 
-            hw_addr_map[DEV::TAG] = mac_addr_t(hw_addr);
-            DLOG(INFO) << "[REGISTER DEV] " << DEV::TAG << " " << hw_addr_map[DEV::TAG];
-        }
-
-        mac_addr_t& query(int tag){
-            if(hw_addr_map.find(tag) != hw_addr_map.end()) {
-                DLOG(ERROR) << "[UNKONWN DEV]";
+            std::optional<mac_addr_t> mac_addr = dev.get_mac_addr(); 
+            if (mac_addr) {
+                mac_addr_map[DEV::TAG] = mac_addr.value();
+                DLOG(INFO) << "[REGISTER MAC] " << DEV::TAG << " " << mac_addr_map[DEV::TAG];
             }
-            return hw_addr_map[tag];
+
+            std::optional<ipv4_addr_t> ipv4_addr = dev.get_ipv4_addr();
+            if (ipv4_addr){
+                ipv4_addr_map[DEV::TAG] = ipv4_addr.value();
+                DLOG(INFO) << "[REGISTER IPV4] " << DEV::TAG << " " << ipv4_addr_map[DEV::TAG];
+            }
+
         }
 
-        void arp_filter(std::optional<l2_packet> packet){
+        std::optional<mac_addr_t> query_mac_addr(int tag){
+            if(mac_addr_map.find(tag) == mac_addr_map.end()) {
+                DLOG(ERROR) << "[UNKONWN MAC]";
+                return std::nullopt;
+            }
+            return mac_addr_map[tag];
+        }
 
+        std::optional<ipv4_addr_t> query_ipv4_addr(int tag){
+            if(ipv4_addr_map.find(tag) == ipv4_addr_map.end()) {
+                DLOG(ERROR) << "[UNKONWN IPV4]";
+                return std::nullopt;
+            }
+            return ipv4_addr_map[tag];
+        }
+
+        std::optional<raw_packet> arp_filter(std::optional<l2_packet>& in_packet){
+            if(in_packet->_proto == arp::PROTO) {
+
+                std::optional<mac_addr_t> dev_mac_addr = query_mac_addr(TUNTAP_DEV);
+                std::optional<ipv4_addr_t> dev_ipv4_addr = query_ipv4_addr(TUNTAP_DEV);
+                
+                if(!dev_mac_addr || !dev_ipv4_addr) {
+                    DLOG(ERROR) << "[UNKNOWN PACKET]";
+                    return std::nullopt;
+                }
+
+                struct arpv4_header_t in_arp_header;
+                in_arp_header.consume(in_packet->_payload->get_pointer());
+                DLOG(INFO) << "[START ARP HOOK] " << in_arp_header;
+                struct arpv4_header_t out_arp_header;
+
+                out_arp_header.hw_type = in_arp_header.hw_type;
+                out_arp_header.proto_type = in_arp_header.proto_type;
+                out_arp_header.hw_size = in_arp_header.hw_size;
+                out_arp_header.proto_size = in_arp_header.proto_size;
+                out_arp_header.opcode = in_arp_header.opcode;
+                out_arp_header.dst_mac_addr = in_arp_header.dst_mac_addr;
+                out_arp_header.dst_ip_addr = in_arp_header.dst_ip_addr;
+
+                out_arp_header.src_mac_addr = dev_mac_addr.value();
+                out_arp_header.src_ip_addr = dev_ipv4_addr.value();
+
+                out_arp_header.produce(in_packet->_payload->get_pointer());
+                DLOG(INFO) << "[END ARP HOOK] " << out_arp_header ;
+                in_packet->_payload->reflush_packet(ethernet_header_t::size());
+
+                struct ethernet_header_t eth_header;
+
+                eth_header.dst_mac_addr = out_arp_header.dst_mac_addr;
+                eth_header.src_mac_addr = out_arp_header.src_mac_addr;
+                eth_header.ethernet_type = arp::PROTO;
+
+                eth_header.produce(in_packet->_payload->get_pointer());
+
+                raw_packet out_packet(TUNTAP_DEV, std::move(in_packet->_payload));
+                return std::move(out_packet);
+            }
         }
         
-        std::optional<raw_packet> arp_convert(std::optional<l2_packet> packet){
-            if(packet->_proto == arp::PROTO) {
-                vector<uint8> dev_hw_addr = dev_hw_addr.query(TUNTAP_DEV);
-                struct arpv4_hdr* arp_packet = packet._payload->get_header<arpv4_hdr>();
-                std::copy(begin(dev_hw_addr), end(dev_hw_addr), arp_packet->src_mac);
-                
-                packet._payload.reflush_packet<eth_hdr>();
-
-                struct eth_hdr* eth_packet = packet._payload->get_header<eth_hdr>();
-
-                std::copy(begin(packet->_remote_mac_addr), end(packet->_remote_mac_addr), eth_packet->dst_mac_addr);
-                std::copy(begin(dev_hw_addr), end(dev_hw_addr), eth_packet->src_mac_addr);
-
-                raw_packet out_packet(TUNTAP_DEV, std::move(packet._payload));
-                return std::move(out_packet)
-            }
-        }
-    }
+    };
 };

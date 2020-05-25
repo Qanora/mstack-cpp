@@ -6,37 +6,40 @@
 #include <iomanip>
 #include <optional>
 #include <unordered_map>
-//#include "arp.hpp"
+#include "arp.hpp"
 
 namespace mstack {
 
 class l2_hook : public base_hook_funcs<l2_packet> {
 public:
-
+    arp_hook_t arp_hook;
     template<typename DEV>
     void hook_register_dev(DEV& dev) {
-        dev_hw_addr.add(dev);
+        arp_hook.add(dev);
+        return;
     }
     
     virtual void
     hook_register_protocol(protocol_interface<l2_packet>& protocol)
     {
         DLOG(INFO) << "[REGISTER] " << protocol.tag();
+        return;
     }
 
-    virtual std::optional<l2_packet>
-    hook_dispatch(std::optional<l2_packet> packet)
+    virtual void
+    hook_dispatch(std::optional<l2_packet>& packet)
     {
-        return packet;
+        return;
     }
 
     virtual std::optional<raw_packet>
-    hook_gather(std::optional<l2_packet>& packet)
+    hook_gather(std::optional<l2_packet> packet)
     {
-        // if(packet.proto == arp::PROTO) {
-        //     return std::move(arpv4(packet));
-        // }
-        return std::nullopt;
+        DLOG(INFO) << packet.value();
+        if(packet->_proto == arp::PROTO){
+            return std::move(arp_hook.arp_filter(packet));
+        }
+        return std::move(std::nullopt);
     }
 };
 

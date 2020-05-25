@@ -16,18 +16,15 @@
 
 namespace mstack {
 
-
-
-    template <int mtu, int hw_type, int hw_size>
+    template <int mtu>
     class tuntap {
     public:
-        constexpr static int HW_TYPE = hw_type;
-        constexpr static int HW_SIZE = hw_size;
         constexpr static int MTU = mtu;
         constexpr static int TAG = TUNTAP_DEV;
     private:
         file_desc _fd;
-        std::array<uint8_t, HW_SIZE> _hw_addr;
+        std::optional<mac_addr_t> _mac_addr;
+        std::optional<ipv4_addr_t> _ipv4_addr;
         std::string _dev_name = "tap0";
 
         bool _available = false;
@@ -64,7 +61,7 @@ namespace mstack {
         }
 
     private:
-        void set_hw_addr() {
+        void set_mac_addr() {
             
             struct ifreq ifr;
 
@@ -75,10 +72,11 @@ namespace mstack {
             if (err < 0) {
                 LOG(FATAL) << "[HW FAIL]";
             }
-
+            std::array<uint8_t, 6> hw_addr;
             for (int i = 0; i < 6; ++i) {
-                _hw_addr[i] = ifr.ifr_addr.sa_data[i];
+                hw_addr[i] = ifr.ifr_addr.sa_data[i];
             }
+            _mac_addr = mac_addr_t(hw_addr);
         }
 
         void init()
@@ -111,9 +109,9 @@ namespace mstack {
                 return;
             }
 
-            set_hw_addr();
+            set_mac_addr();
 
-            DLOG(INFO) << "[INIT MAC] " << mac_addr_t(_hw_addr);
+            DLOG(INFO) << "[INIT MAC] " << _mac_addr.value();
 
             util::set_interface_route(_dev_name, "192.168.1.0/24");
             _available = true;
@@ -136,10 +134,17 @@ namespace mstack {
         
     public:
 
-        std::array<uint8_t, HW_SIZE> get_hw_addr(){
-            return _hw_addr;
+        std::optional<mac_addr_t> get_mac_addr(){
+            return _mac_addr;
         }
 
+        std::optional<ipv4_addr_t> get_ipv4_addr(){
+            return _ipv4_addr;
+        }
+
+        void set_ipv4_addr(ipv4_addr_t ipv4_addr){
+            _ipv4_addr = ipv4_addr;
+        }
         void register_provider_func(packet_provider_type func)
         {
             _provider_func = func;
@@ -189,7 +194,7 @@ namespace mstack {
                             int len = MTU;
 
                             decode_raw_packet(raw_packet.value(), _buf, len);
-
+                            DLOG(INFO) << "[TUNTAP WRITE] " << len;
                             write(pollevent[0].fd, _buf, len);
                         }
                     } else {
