@@ -50,40 +50,77 @@ namespace util {
         return run_cmd("ip link set dev %s up", dev);
     }
 
-
-    uint32_t ntoh(uint32_t value){
-        return (value & 0x000000FFU) << 24 | (value & 0x0000FF00U) << 8 | 
-                (value & 0x00FF0000U) >> 8 | (value & 0xFF000000U) >> 24; 
+    uint32_t ntoh(uint32_t value)
+    {
+        return (value & 0x000000FFU) << 24 | (value & 0x0000FF00U) << 8 | (value & 0x00FF0000U) >> 8 | (value & 0xFF000000U) >> 24;
     }
 
-    uint16_t ntoh(uint16_t value){
+    uint16_t ntoh(uint16_t value)
+    {
         return (value & 0x00FF) << 8 | (value & 0xFF00) >> 8;
     }
 
-    uint8_t ntoh(uint8_t value){
+    uint8_t ntoh(uint8_t value)
+    {
         return value;
     }
 
     template <typename T>
-    inline T consume(uint8_t*& ptr) {
+    inline T consume(uint8_t*& ptr)
+    {
         T ret = *(reinterpret_cast<T*>(ptr));
         ptr += sizeof(T);
         return ntoh(ret);
     }
 
     template <typename T>
-    inline void produce(uint8_t*& p, T t) {
+    inline void produce(uint8_t*& p, T t)
+    {
         T* ptr_ = reinterpret_cast<T*>(p);
         *ptr_ = ntoh(t);
         p += sizeof(T);
     }
 
-    std::string print_mm(uint8_t* ptr, int len){
+    std::string print_mm(uint8_t* ptr, int len)
+    {
         std::ostringstream os;
-        for(int i = 0; i < len; i++){
+        for (int i = 0; i < len; i++) {
             os << format("%02X", *(ptr + i));
         }
         return os.str();
+    }
+
+    uint32_t sum_every_16bits(uint8_t* addr, int count)
+    {
+        uint32_t sum = 0;
+
+        uint16_t* ptr = reinterpret_cast<uint16_t*>(addr);
+
+        while (count > 1) {
+            /*  This is the inner loop */
+            sum += *ptr++;
+            count -= 2;
+        }
+
+        /*  Add left-over byte, if any */
+        if (count > 0)
+            sum += *(uint8_t*)ptr;
+
+        return sum;
+    }
+
+    uint16_t checksum(uint8_t* addr, int count, int start_sum)
+    {
+        uint32_t sum = start_sum;
+
+        sum += sum_every_16bits(addr, count);
+
+        /*  Fold 32-bit sum to 16 bits */
+        while (sum >> 16)
+            sum = (sum & 0xffff) + (sum >> 16);
+
+        uint16_t ret = ~sum;
+        return ntoh(ret);
     }
 }; // namespace util
 };

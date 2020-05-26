@@ -4,7 +4,7 @@
 #include "utils.hpp"
 #include "l2_layer.hpp"
 #include "l3_layer.hpp"
-#include "ipv4.hpp"
+//#include "ipv4.hpp"
 #include "arp.hpp"
 int main(int argc, char* argv[])
 {
@@ -16,19 +16,18 @@ int main(int argc, char* argv[])
     using tuntap = mstack::tuntap<1500>;
     auto &tuntap_dev = tuntap::instance();
     tuntap_dev.set_ipv4_addr(mstack::ipv4_addr_t("192.168.1.1"));
+    
     l2_layer.register_dev(tuntap_dev);
 
     auto &arp = mstack::arp::instance();
     l2_layer.register_protocol(arp);
 
     auto &l3_layer = mstack::l3_layer::instance();
-    l2_layer.register_forward_layer(l3_layer);
-
-    auto &ipv4 = mstack::ipv4::instance();
-    l3_layer.register_protocol(ipv4);
+    l2_layer.register_upper_layer(l3_layer);
 
     auto &icmp = mstack::icmp::instance();
-    l3_layer.register_protocol(icmp);    
+    l3_layer.register_protocol(icmp);  
+      
     tuntap_dev.run();
 
     // auto &l2_layer = mstack::l2_layer::instance();

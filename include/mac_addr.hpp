@@ -1,9 +1,9 @@
 #pragma once
-#include <array>
-#include <algorithm>
 #include "utils.hpp"
+#include <algorithm>
+#include <array>
 
-namespace mstack{
+namespace mstack {
 
 struct mac_addr_t {
 private:
@@ -16,7 +16,7 @@ public:
     {
         std::copy(std::begin(other.mac), std::end(other.mac), std::begin(mac));
     }
-    
+
     mac_addr_t(mac_addr_t&& other)
     {
         std::swap(mac, other.mac);
@@ -33,14 +33,16 @@ public:
         std::swap(mac, other.mac);
     };
 
-    mac_addr_t(std::array<uint8_t, 6> other){
-        for(int i = 0; i < 6; i++){
+    mac_addr_t(std::array<uint8_t, 6> other)
+    {
+        for (int i = 0; i < 6; i++) {
             mac[i] = other[i];
         }
     }
 
-    mac_addr_t(uint8_t other[6]){
-        for(int i = 0; i < 6; i++){
+    mac_addr_t(uint8_t other[6])
+    {
+        for (int i = 0; i < 6; i++) {
             mac[i] = other[i];
         }
     }
@@ -53,20 +55,23 @@ public:
         }
     };
 
-    void consume(uint8_t*& ptr){
-        for(int i = 0; i < 6; i++){
+    void consume(uint8_t*& ptr)
+    {
+        for (int i = 0; i < 6; i++) {
             mac[i] = util::consume<uint8_t>(ptr);
         }
     }
 
-    void produce(uint8_t*& ptr){
-        for(int i = 0; i < 6; i++){
+    void produce(uint8_t*& ptr)
+    {
+        for (int i = 0; i < 6; i++) {
             uint8_t tmp = mac[i];
             util::produce<uint8_t>(ptr, tmp);
         }
     }
-    static constexpr size_t size() {
-       return 6;
+    static constexpr size_t size()
+    {
+        return 6;
     }
     friend std::ostream& operator<<(std::ostream& out, const mac_addr_t& m)
     {
@@ -76,5 +81,4 @@ public:
         return out;
     }
 };
-
 }

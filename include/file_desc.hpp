@@ -1,7 +1,7 @@
 #pragma once
 
-#include <optional>
 #include "logger.hpp"
+#include <optional>
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -24,7 +24,8 @@ public:
     static constexpr int NONBLOCK = O_NONBLOCK;
 
 public:
-    file_desc(): _fd(-1){};
+    file_desc()
+        : _fd(-1){};
     ~file_desc()
     {
         if (_fd != -1)
@@ -46,9 +47,11 @@ public:
         }
         return *this;
     }
-    operator bool() {
+    operator bool()
+    {
         return _fd != -1;
     }
+
 public:
     static std::optional<file_desc> from_fd(int fd)
     {
