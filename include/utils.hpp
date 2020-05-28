@@ -5,7 +5,6 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
-
 namespace mstack {
 namespace util {
     static int init_logger(int argc, char* argv[])

@@ -11,8 +11,12 @@ using port_addr_t = uint16_t;
 struct half_connect_id_t {
     ipv4_addr_t ip_addr;
     port_addr_t port_addr;
-    half_connect_id_t(ipv4_addr_t ip_addr, port_addr_t port_addr) : ip_addr(ip_addr), port_addr(port_addr){}
-    bool operator== (const half_connect_id_t& rhs) const
+    half_connect_id_t(ipv4_addr_t ip_addr, port_addr_t port_addr)
+        : ip_addr(ip_addr)
+        , port_addr(port_addr)
+    {
+    }
+    bool operator==(const half_connect_id_t& rhs) const
     {
         return ip_addr == rhs.ip_addr && port_addr == rhs.port_addr;
     };
@@ -29,8 +33,12 @@ struct half_connect_id_t {
 struct full_connect_id_t {
     half_connect_id_t remote_info;
     half_connect_id_t local_info;
-    full_connect_id_t(half_connect_id_t remote_info, half_connect_id_t local_info): remote_info(remote_info), local_info(local_info){}
-    bool operator== (const full_connect_id_t& rhs) const
+    full_connect_id_t(half_connect_id_t remote_info, half_connect_id_t local_info)
+        : remote_info(remote_info)
+        , local_info(local_info)
+    {
+    }
+    bool operator==(const full_connect_id_t& rhs) const
     {
         return remote_info == rhs.remote_info && local_info == rhs.local_info;
     };
@@ -38,7 +46,7 @@ struct full_connect_id_t {
     {
         using u = uint32_t;
         out << "R: " << info.remote_info;
-        out <<" L: " << info.local_info;
+        out << " L: " << info.local_info;
         return out;
     }
 };
@@ -149,9 +157,8 @@ struct l2_packet {
 
 using raw_packet = std::unique_ptr<uint8_t[]>;
 
-struct tcp_packet{
+struct tcp_packet {
     uint32_t seq_no;
     raw_packet payload;
 };
-
 };

@@ -3,7 +3,7 @@
 #include <optional>
 #include <queue>
 namespace mstack {
-    
+
 template <typename PacketType>
 class circle_buffer {
 private:

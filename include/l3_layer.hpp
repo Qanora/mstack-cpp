@@ -2,10 +2,10 @@
 #include "icmp.hpp"
 #include "ipv4.hpp"
 #include "ipv4_addr.hpp"
-#include "tcp.hpp"
-#include "tcb.hpp"
 #include "layer.hpp"
 #include "packets.hpp"
+#include "tcb.hpp"
+#include "tcp.hpp"
 #include <optional>
 namespace mstack {
 
@@ -45,7 +45,7 @@ public:
         if (!in_packet) {
             return std::nullopt;
         }
-        if( in_packet->_proto == tcp::PROTO) {
+        if (in_packet->_proto == tcp::PROTO) {
             in_packet->_payload->add_offset(ipv4_header_t::size());
             tcp_header_t tcp_header;
             tcp_header.consume(in_packet->_payload->get_pointer());
