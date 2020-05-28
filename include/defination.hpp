@@ -21,4 +21,4 @@ constexpr static int TCP_TIME_WAIT = 0x20;
 constexpr static int SOCKET_UNCONNECTED = 0x21;
 constexpr static int SOCKET_CONNECTING = 0x22;
 constexpr static int SOCKET_CONNECTED = 0x23;
-};
+};  // namespace mstack
