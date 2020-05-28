@@ -1,4 +1,5 @@
 #pragma once
+#include "ipv4.hpp"
 #include "packet.hpp"
 #include "packets.hpp"
 #include "protocol.hpp"
@@ -72,6 +73,7 @@ public:
     virtual void receive(l3_packet in_packet)
     {
         // DLOG(INFO) << "[RECEIVED ICMP] " << in_packet;
+        in_packet._payload->add_offset(ipv4_header_t::size());
         icmp_header_t in_icmp_header;
         in_icmp_header.consume(in_packet._payload->get_pointer());
 

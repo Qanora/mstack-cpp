@@ -1,14 +1,13 @@
 #pragma once
 
 #include <cstdarg>
-#include <iostream>
-
 #include <fmt/printf.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+
+
 namespace mstack {
 namespace util {
-
     static int init_logger(int argc, char* argv[])
     {
         FLAGS_logtostderr = true;

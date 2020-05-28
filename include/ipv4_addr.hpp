@@ -77,9 +77,9 @@ public:
 namespace std {
 template <>
 struct hash<mstack::ipv4_addr_t> {
-    std::size_t operator()(const mstack::ipv4_addr_t& ipv4_addr) const
+    size_t operator()(const mstack::ipv4_addr_t& ipv4_addr) const
     {
-        return std::hash<uint32_t>{}(ipv4_addr.get_raw_ipv4());
+        return hash<uint32_t>{}(ipv4_addr.get_raw_ipv4());
     }
 };
 };

@@ -51,7 +51,6 @@ public:
         }
         ipv4_header_t in_ipv4_packet;
         in_ipv4_packet.consume(in_packet->_payload->get_pointer());
-        in_packet->_payload->add_offset(ipv4_header_t::size());
         return l3_packet(in_ipv4_packet.src_ip_addr, in_ipv4_packet.dst_ip_addr, in_ipv4_packet.proto_type, std::move(in_packet->_payload));
     }
 

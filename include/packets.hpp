@@ -3,46 +3,72 @@
 #include "ipv4_addr.hpp"
 #include "mac_addr.hpp"
 #include "packet.hpp"
-
 #include <iomanip>
 #include <memory>
 #include <optional>
 namespace mstack {
+using port_addr_t = uint16_t;
+struct half_connect_id_t {
+    ipv4_addr_t ip_addr;
+    port_addr_t port_addr;
+    half_connect_id_t(ipv4_addr_t ip_addr, port_addr_t port_addr) : ip_addr(ip_addr), port_addr(port_addr){}
+    bool operator== (const half_connect_id_t& rhs) const
+    {
+        return ip_addr == rhs.ip_addr && port_addr == rhs.port_addr;
+    };
+    friend std::ostream& operator<<(std::ostream& out, half_connect_id_t info)
+    {
+        using u = uint32_t;
+        out << "(";
+        out << info.ip_addr << " ";
+        out << u(info.port_addr) << ")";
+        return out;
+    }
+};
+
+struct full_connect_id_t {
+    half_connect_id_t remote_info;
+    half_connect_id_t local_info;
+    full_connect_id_t(half_connect_id_t remote_info, half_connect_id_t local_info): remote_info(remote_info), local_info(local_info){}
+    bool operator== (const full_connect_id_t& rhs) const
+    {
+        return remote_info == rhs.remote_info && local_info == rhs.local_info;
+    };
+    friend std::ostream& operator<<(std::ostream& out, full_connect_id_t info)
+    {
+        using u = uint32_t;
+        out << "R: " << info.remote_info;
+        out <<" L: " << info.local_info;
+        return out;
+    }
+};
 
 struct l4_packet {
     using l4_proto = uint16_t;
-    using port_addr_t = uint16_t;
     static constexpr int tag = L4_PACKET;
     l4_proto _proto;
-
-    std::optional<ipv4_addr_t> _src_ipv4_addr;
-    std::optional<ipv4_addr_t> _dst_ipv4_addr;
-    std::optional<port_addr_t> _src_port_addr;
-    std::optional<port_addr_t> _dst_port_addr;
+    std::optional<half_connect_id_t> _remote_info;
+    std::optional<half_connect_id_t> _local_info;
     std::unique_ptr<packet> _payload;
 
-    l4_packet(std::optional<ipv4_addr_t> sip, std::optional<ipv4_addr_t> dip,
-        std::optional<port_addr_t> sport, std::optional<port_addr_t> dport,
+    l4_packet(std::optional<half_connect_id_t> remote_info, std::optional<half_connect_id_t> local_info,
         l4_proto pr, std::unique_ptr<packet> pa)
-        : _src_ipv4_addr(sip)
-        , _dst_ipv4_addr(dip)
-        , _src_port_addr(sport)
-        , _dst_port_addr(dport)
+        : _remote_info(remote_info)
+        , _local_info(local_info)
         , _proto(pr)
         , _payload(std::move(pa)){};
 
     friend std::ostream& operator<<(std::ostream& out, l4_packet& p)
     {
-        if (p._src_ipv4_addr && p._src_port_addr) {
-            out << p._src_ipv4_addr.value() << " ";
-            out << p._src_port_addr.value();
+        out << "R: ";
+        if (p._remote_info) {
+            out << p._remote_info.value();
         } else {
             out << "NONE";
         }
-        out << " -> ";
-        if (p._dst_ipv4_addr && p._dst_port_addr) {
-            out << p._dst_ipv4_addr.value() << " ";
-            out << p._dst_port_addr.value();
+        out << " L: ";
+        if (p._local_info) {
+            out << p._local_info.value();
         } else {
             out << "NONE";
         }
@@ -120,4 +146,12 @@ struct l2_packet {
         return out;
     }
 };
-}
+
+using raw_packet = std::unique_ptr<uint8_t[]>;
+
+struct tcp_packet{
+    uint32_t seq_no;
+    raw_packet payload;
+};
+
+};

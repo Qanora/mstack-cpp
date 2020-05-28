@@ -2,6 +2,8 @@
 #include "icmp.hpp"
 #include "ipv4.hpp"
 #include "ipv4_addr.hpp"
+#include "tcp.hpp"
+#include "tcb.hpp"
 #include "layer.hpp"
 #include "packets.hpp"
 #include <optional>
@@ -42,6 +44,14 @@ public:
     {
         if (!in_packet) {
             return std::nullopt;
+        }
+        if( in_packet->_proto == tcp::PROTO) {
+            in_packet->_payload->add_offset(ipv4_header_t::size());
+            tcp_header_t tcp_header;
+            tcp_header.consume(in_packet->_payload->get_pointer());
+            half_connect_id_t remote_info(in_packet->_src_ipv4_addr.value(), tcp_header.src_port);
+            half_connect_id_t local_info(in_packet->_dst_ipv4_addr.value(), tcp_header.dst_port);
+            return l4_packet(remote_info, local_info, in_packet->_proto, std::move(in_packet->_payload));
         }
         return std::nullopt;
     }

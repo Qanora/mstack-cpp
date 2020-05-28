@@ -33,12 +33,12 @@ public:
         return;
     }
 
-    virtual std::optional<CurrentPacketType> gather_packet()
+    std::optional<CurrentPacketType> gather_packet()
     {
         return std::move(packet_queue.pop_front());
     }
 
-    virtual void forward(CurrentPacketType packet)
+    void forward(CurrentPacketType packet)
     {
         if (_forward_to_current_layer_func) {
             _forward_to_current_layer_func.value()(std::move(packet));
