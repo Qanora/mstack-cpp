@@ -1,0 +1,22 @@
+language: cpp
+dist: xenial
+
+before_script:
+  - eval "${MATRIX_EVAL}"
+  - $CXX --version
+
+before_install:
+  - sudo apt-get -y install libfmt-dev
+  - sudo apt-get -y install libgoogle-glog-dev/bionic
+script:
+  - mkdir build && cd ./build
+  - cmake ..
+  - make
+  - sudo ./mstack
+  
+branches:
+  only:
+  - master
+  
+notifications:
+  email: false
