@@ -56,6 +56,12 @@ class l3_hook : public base_hook_funcs<l3_packet, l4_packet> {
     if (!in_packet) {
       return std::nullopt;
     }
+    if (in_packet->_proto == tcp::PROTO) {
+      auto out_packet = std::make_optional<l3_packet>(
+          in_packet->_local_info->ip_addr, in_packet->_remote_info->ip_addr,
+          in_packet->_proto, std::move(in_packet->_payload));
+      return out_packet;
+    }
     return std::nullopt;
   }
 };

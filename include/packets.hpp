@@ -8,6 +8,7 @@
 #include "packet.hpp"
 namespace mstack {
 using port_addr_t = uint16_t;
+
 struct half_connect_id_t {
   ipv4_addr_t ip_addr;
   port_addr_t port_addr;

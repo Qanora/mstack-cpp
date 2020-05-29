@@ -3,7 +3,6 @@
 #include <functional>
 #include "circle_buffer.hpp"
 #include "ipv4_addr.hpp"
-#include "packets.hpp"
 
 namespace mstack {
 using port_addr_t = uint16_t;
@@ -35,9 +34,36 @@ struct full_tcb_t {
   full_connect_id_t connect_id;
   circle_buffer<tcp_packet> sender_queue;
   circle_buffer<tcp_packet> receiver_queue;
+  circle_buffer<l4_packet> ctl_packet;
   sender_t sender;
   receiver_t receiver;
+
+  bool can_send() { return true; }
+
+  void enqueue_packet(l4_packet in_packet) {
+    ctl_packet.push_back(std::move(in_packet));
+  }
+
+  std::optional<l4_packet> make_l4_packet(std::optional<tcp_packet> in_packet) {
+    return std::nullopt;
+  }
+
+  std::optional<l4_packet> gather_packet() {
+    if (!ctl_packet.empty()) {
+      return std::move(ctl_packet.pop_front());
+    }
+    if (can_send()) {
+      return make_l4_packet(std::move(receiver_queue.pop_front()));
+    }
+    return std::nullopt;
+  }
+
   full_tcb_t(full_connect_id_t connect_id) : connect_id(connect_id) {}
+  friend std::ostream& operator<<(std::ostream& out, full_tcb_t& m) {
+    out << m.connect_id << " ";
+    out << state_to_string(m.state);
+    return out;
+  }
 };
 
 struct half_tcb_t {
@@ -65,4 +91,5 @@ struct hash<mstack::full_connect_id_t> {
            hash<mstack::half_connect_id_t>{}(full_connect_id.local_info);
   }
 };
+
 };  // namespace std

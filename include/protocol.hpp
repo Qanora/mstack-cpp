@@ -26,7 +26,7 @@ class protocol_interface {
 
   virtual void receive(CurrentPacketType packet) { return; }
 
-  std::optional<CurrentPacketType> gather_packet() {
+  virtual std::optional<CurrentPacketType> gather_packet() {
     return std::move(packet_queue.pop_front());
   }
 
