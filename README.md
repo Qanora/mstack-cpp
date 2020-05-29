@@ -19,3 +19,31 @@ Unlike C-style procedural programming, C++ has features such as object-oriented 
 ```
 mkdir build && cd build && cmake .. && make && sudo ./mstack
 ```
+
+## Current Feature
+  + Ethernet II frame
+  + ARP reply, simple caching
+  + ICMP reply
+  + IPv4 packet handling, checksum
+  + TCPv4 Handshake
+  + TCP RFC793 "Segment Arrives"
+
+## Doing Feature
+  + ARP request
+  + TCP RFC6298 Retransmission calculation
+  + TCP RFC793 User Timeout
+  + TCP data transmission
+  + TCP Window Management
+  + TCP Congestion Control
+  + Server socket API calls (bind, accept...)
+## Upcoming Feature
+  + IP Fragmentation
+  + IP/ICMP Diagnostics
+  + TCP Selective Acknowledgments (SACK)
+  + TCP Silly Window Syndrome Avoidance
+  + TCP Zero-Window Probes
+  + ...
+
+## References
+  + [level-ip](https://github.com/saminiir/level-ip)
+  + [seastar](https://github.com/scylladb/seastar)
