@@ -1,5 +1,7 @@
 # mstack-cpp 🧐
 
+[![Build Status](https://travis-ci.org/Qanora/mstack-cpp.svg?branch=master)](https://travis-ci.org/Qanora/mstack-cpp)
+
 mstack-cpp is a Linux user-space TCP / IP stack based on TUN / TAP devices implemented in C++20.
 
 This project aims to implement a **SIMPLE** and **READABLE** TCP / IP user-space protocol stack. Although it is not sound and cannot be used on a large scale, it is an excellent opportunity to explore the composition of the TCP / IP protocol stack. At the same time, it can help us to understand the various trade-offs on the architecture of the protocol stack.
