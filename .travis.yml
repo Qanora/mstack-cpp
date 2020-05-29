@@ -1,8 +1,7 @@
 language: cpp
-dist: xenial
+dist: bionic
 
 before_script:
-  - eval "${MATRIX_EVAL}"
   - $CXX --version
 
 before_install:
