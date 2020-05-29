@@ -1,6 +1,7 @@
 # mstack-cpp 🧐
 
 [![Build Status](https://travis-ci.org/Qanora/mstack-cpp.svg?branch=master)](https://travis-ci.org/Qanora/mstack-cpp)
+[![GitHub license](https://img.shields.io/github/license/sultan99/react-on-lambda.svg)](https://github.com/Qanora/mstack-cpp/blob/master/LICENSE)
 
 mstack-cpp is a Linux user-space TCP / IP stack based on TUN / TAP devices implemented in C++20.
 
