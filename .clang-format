@@ -1,0 +1,16 @@
+---
+BasedOnStyle: Chromium
+AccessModifierOffset: '-8'
+MaxEmptyLinesToKeep: '1'
+ColumnLimit: '100'
+AlignTrailingComments: 'true'
+AllowShortIfStatementsOnASingleLine: 'WithoutElse'
+AllowShortFunctionsOnASingleLine: 'All'
+ContinuationIndentWidth: '8'
+IndentWidth: '8'
+# AlwaysBreakAfterReturnType: 'AllDefinitions'
+AlignConsecutiveDeclarations: 'true'
+AlignConsecutiveAssignments: 'true'
+UseTab: Never
+
+...

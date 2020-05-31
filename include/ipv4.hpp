@@ -35,16 +35,16 @@ public:
 
                 std::optional<mac_addr_t> src_mac_addr =
                         arp_instance.query_by_ipv4(in_packet.src_ipv4_addr.value());
-                if(!src_mac_addr){
+                if (!src_mac_addr) {
                         DLOG(FATAL) << "[NO MAC] " << in_packet.src_ipv4_addr.value();
                 }
                 std::optional<mac_addr_t> dst_mac_addr =
                         arp_instance.query_by_ipv4(in_packet.dst_ipv4_addr.value());
-                
-                if(!dst_mac_addr){
+
+                if (!dst_mac_addr) {
                         DLOG(FATAL) << "[NO MAC] " << in_packet.dst_ipv4_addr.value();
                 }
-                
+
                 ethernetv2_packet out_packet = {.src_mac_addr = src_mac_addr.value(),
                                                 .dst_mac_addr = dst_mac_addr.value(),
                                                 .proto        = PROTO,

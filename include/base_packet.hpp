@@ -17,10 +17,7 @@ public:
 
 public:
         base_packet(uint8_t* buf, int len)
-            : _raw_data(std::make_unique<uint8_t[]>(len)),
-              _head(0),
-              _len(len),
-              _data_stack_len(0) {
+            : _raw_data(std::make_unique<uint8_t[]>(len)), _head(0), _len(len), _data_stack_len(0) {
                 std::copy(buf, buf + len, _raw_data.get());
         }
 
@@ -53,7 +50,7 @@ public:
                 _len      = len;
                 _raw_data = std::make_unique<uint8_t[]>(len);
         }
-        
+
         void export_payload(uint8_t* buf, int len) {
                 int index = 0;
                 for (int i = _head + len; i < _len; i++) {

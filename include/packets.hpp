@@ -16,7 +16,7 @@ struct ethernetv2_packet {
         std::optional<mac_addr_t>    dst_mac_addr;
         uint16_t                     proto;
         std::unique_ptr<base_packet> buffer;
-        friend std::ostream& operator<<(std::ostream& out, ethernetv2_packet& p) {
+        friend std::ostream&         operator<<(std::ostream& out, ethernetv2_packet& p) {
                 if (p.src_mac_addr) {
                         out << p.src_mac_addr.value();
                 } else {
@@ -101,7 +101,7 @@ struct two_ends_t {
                 } else {
                         out << "NONE";
                 }
-                out << "->";
+                out << " -> ";
                 if (p.local_info) {
                         out << p.local_info.value();
                 } else {

@@ -14,15 +14,7 @@ private:
         std::vector<packet_from_upper_type>           _packet_providers;
         circle_buffer<UnderPacketType>                packet_queue;
 
-private:
-        // base_protocol()  = default;
-        // ~base_protocol() = default;
-
 public:
-        // base_protocol(const base_protocol&) = delete;
-        // base_protocol(base_protocol&&)      = delete;
-        // base_protocol& operator=(const base_protocol&) = delete;
-        // base_protocol& operator=(base_protocol&&) = delete;
         static ChildType& instance() {
                 static ChildType instance;
                 return instance;

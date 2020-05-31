@@ -5,6 +5,7 @@
 #include <unordered_set>
 
 #include "circle_buffer.hpp"
+#include "defination.hpp"
 #include "packets.hpp"
 #include "tcb.hpp"
 #include "tcp_transmit.hpp"
@@ -41,6 +42,7 @@ public:
                 return std::nullopt;
         }
 
+        void listen_port(ipv4_port_t ipv4_port) { active_ports.insert(ipv4_port); }
         void register_tcb(two_ends_t& two_end) {
                 DLOG(INFO) << "[REGISTER TCB] " << two_end;
                 if (!two_end.remote_info || !two_end.local_info) {
@@ -60,6 +62,7 @@ public:
                         register_tcb(two_end);
 
                         if (tcbs.find(two_end) != tcbs.end()) {
+                                tcbs[two_end]->state = TCP_LISTEN;
                                 tcp_transmit::tcp_in(tcbs[two_end], in_packet);
                         } else {
                                 DLOG(ERROR) << "[REGISTER TCB FAIL]";

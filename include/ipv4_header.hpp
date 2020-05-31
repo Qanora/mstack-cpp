@@ -19,20 +19,19 @@ struct ipv4_header_t {
         ipv4_addr_t src_ip_addr;
         ipv4_addr_t dst_ip_addr;
 
-        ipv4_header_t() {
-                version         = 0;
-                header_length   = 0;
-                type_of_service = 0;
-                total_length    = 0;
-                id              = 0;
-                NOP             = 0;
-                DF              = 0;
-                MF              = 0;
-                frag_offset     = 0;
-                ttl             = 0;
-                proto_type      = 0;
-                header_checksum = 0;
-        }
+        ipv4_header_t()
+            : version(0),
+              header_length(0),
+              type_of_service(0),
+              total_length(0),
+              id(0),
+              NOP(0),
+              DF(0),
+              MF(0),
+              frag_offset(0),
+              ttl(0),
+              proto_type(0),
+              header_checksum(0) {}
 
         static constexpr size_t size() {
                 return 1 + 1 + 2 + 2 + 2 + 1 + 1 + 2 + ipv4_addr_t::size() * 2;
