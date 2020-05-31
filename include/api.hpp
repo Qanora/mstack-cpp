@@ -1,61 +1,48 @@
-#include <future>
-#include "tuntap.hpp"
+#pragma once
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 
 #include "arp.hpp"
+#include "ethernet.hpp"
 #include "icmp.hpp"
-#include "l2_layer.hpp"
-#include "l3_layer.hpp"
-#include "l4_layer.hpp"
-#include "socket_manager.hpp"
+#include "ipv4.hpp"
+#include "tcb_manager.hpp"
 #include "tcp.hpp"
-#include "utils.hpp"
+#include "tuntap.hpp"
 namespace mstack {
+static int init_logger(int argc, char* argv[]) {
+        FLAGS_logtostderr      = true;
+        FLAGS_minloglevel      = 0;
+        FLAGS_colorlogtostderr = true;
 
-static int init_stack(int argc, char* argv[]) {
-  mstack::util::init_logger(argc, argv);
-
-  auto& l2_layer = mstack::l2_layer::instance();
-
-  using tuntap = mstack::tuntap<1500>;
-  auto& tuntap_dev = tuntap::instance();
-  tuntap_dev.set_ipv4_addr(mstack::ipv4_addr_t("192.168.1.1"));
-
-  l2_layer.register_dev(tuntap_dev);
-
-  auto& arp = mstack::arp::instance();
-  l2_layer.register_protocol(arp);
-
-  auto& l3_layer = mstack::l3_layer::instance();
-  l2_layer.register_upper_layer(l3_layer);
-
-  auto& icmp = mstack::icmp::instance();
-  l3_layer.register_protocol(icmp);
-
-  auto& l4_layer = mstack::l4_layer::instance();
-  l3_layer.register_upper_layer(l4_layer);
-
-  auto& tcp = mstack::tcp::instance();
-  l4_layer.register_protocol(tcp);
-
-  tuntap_dev.run();
-};
-
-static int socket() {
-  socket_manager_t& socket_manager = socket_manager_t::instance();
-  int fd = socket_manager.register_socket();
-  return fd;
+        gflags::ParseCommandLineFlags(&argc, &argv, true);
+        google::InitGoogleLogging(argv[0]);
 }
 
-static void listen(int fd) {
-  socket_manager_t& socket_manager = socket_manager_t::instance();
-  socket_manager.listen(fd);
-}
+void init_stack() {
+        auto& tuntap_dev = tuntap<1500>::instance();
+        tuntap_dev.set_ipv4_addr(std::string("192.168.1.1"));
 
-static void accept(int fd) {}
+        auto& ethernetv2 = ethernetv2::instance();
+        tuntap_dev.register_upper_protocol(ethernetv2);
 
-static void bind(int fd, ipv4_addr_t ipv4_addr, port_addr_t port_addr) {
-  socket_manager_t& socket_manager = socket_manager_t::instance();
-  half_connect_id_t local_info(ipv4_addr, port_addr);
-  socket_manager.set_socket_local_info(fd, local_info);
+        auto& arpv4 = arp::instance();
+        ethernetv2.register_upper_protocol(arpv4);
+
+        arpv4.register_dev(tuntap_dev);
+
+        auto& ipv4 = ipv4::instance();
+        ethernetv2.register_upper_protocol(ipv4);
+
+        auto& icmp = icmp::instance();
+        ipv4.register_upper_protocol(icmp);
+
+        auto& tcp = tcp::instance();
+        ipv4.register_upper_protocol(tcp);
+
+        auto& tcb_manager = tcb_manager::instance();
+        tcp.register_upper_protocol(tcb_manager);
+
+        tuntap_dev.run();
 }
-};  // namespace mstack
+}  // namespace mstack
