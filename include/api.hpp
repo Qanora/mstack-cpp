@@ -6,11 +6,13 @@
 #include "ethernet.hpp"
 #include "icmp.hpp"
 #include "ipv4.hpp"
+#include "socket_manager.hpp"
 #include "tcb_manager.hpp"
 #include "tcp.hpp"
 #include "tuntap.hpp"
+
 namespace mstack {
-static int init_logger(int argc, char* argv[]) {
+int init_logger(int argc, char* argv[]) {
         FLAGS_logtostderr      = true;
         FLAGS_minloglevel      = 0;
         FLAGS_colorlogtostderr = true;
@@ -18,12 +20,9 @@ static int init_logger(int argc, char* argv[]) {
         gflags::ParseCommandLineFlags(&argc, &argv, true);
         google::InitGoogleLogging(argv[0]);
 }
-void listen(std::string ipv4, int port) {
-        auto&       tcb_manager = tcb_manager::instance();
-        ipv4_port_t ipv4_port   = {.ipv4_addr = ipv4_addr_t(ipv4), .port_addr = port};
-        tcb_manager.listen_port(ipv4_port);
-};
-void init_stack() {
+
+void init_stack(int argc, char* argv[]) {
+        init_logger(argc, argv);
         auto& tuntap_dev = tuntap<1500>::instance();
         tuntap_dev.set_ipv4_addr(std::string("192.168.1.1"));
 
@@ -47,8 +46,29 @@ void init_stack() {
         auto& tcb_manager = tcb_manager::instance();
         tcp.register_upper_protocol(tcb_manager);
 
-        listen(std::string("192.168.1.1"), 30000);
         tuntap_dev.run();
 };
+
+int socket(int proto, ipv4_addr_t ipv4_addr, port_addr_t port_addr) {
+        auto& socket_manager = socket_manager::instance();
+        return socket_manager.register_socket(proto, ipv4_addr, port_addr);
+}
+int listen(int fd) {
+        auto& socket_manager = socket_manager::instance();
+        return socket_manager.listen(fd);
+}
+int accept(int fd) {
+        auto& socket_manager = socket_manager::instance();
+        return socket_manager.accept(fd);
+}
+int read(int fd, char* buf, int& len) {
+        auto& socket_manager = socket_manager::instance();
+        return socket_manager.read(fd, buf, len);
+}
+
+int write(int fd, char* buf, int& len) {
+        auto& socket_manager = socket_manager::instance();
+        return socket_manager.write(fd, buf, len);
+}
 
 }  // namespace mstack

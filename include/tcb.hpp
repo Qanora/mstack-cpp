@@ -9,7 +9,6 @@
 #include "ipv4_addr.hpp"
 #include "packets.hpp"
 #include "tcp_header.hpp"
-
 namespace mstack {
 using port_addr_t = uint16_t;
 struct send_state_t {
@@ -36,21 +35,24 @@ struct receive_state_t {
 };
 
 struct tcb_t : public std::enable_shared_from_this<tcb_t> {
-        std::shared_ptr<circle_buffer<std::shared_ptr<tcb_t>>> _active_tcbs;
+        std::shared_ptr<circle_buffer<std::shared_ptr<tcb_t>>>                _active_tcbs;
+        std::optional<std::shared_ptr<circle_buffer<std::shared_ptr<tcb_t>>>> _listener;
+        int                                                                   state;
+        int                                                                   next_state;
+        std::optional<ipv4_port_t>                                            remote_info;
+        std::optional<ipv4_port_t>                                            local_info;
+        circle_buffer<raw_packet>                                             send_queue;
+        circle_buffer<raw_packet>                                             receive_queue;
+        circle_buffer<tcp_packet_t>                                           ctl_packets;
+        send_state_t                                                          send;
+        receive_state_t                                                       receive;
 
-        int                         state;
-        std::optional<ipv4_port_t>  remote_info;
-        std::optional<ipv4_port_t>  local_info;
-        circle_buffer<raw_packet>   send_queue;
-        circle_buffer<raw_packet>   receive_queue;
-        circle_buffer<tcp_packet_t> ctl_packets;
-        send_state_t                send;
-        receive_state_t             receive;
-
-        tcb_t(std::shared_ptr<circle_buffer<std::shared_ptr<tcb_t>>> active_tcbs,
-              ipv4_port_t                                            remote_info,
-              ipv4_port_t                                            local_info)
+        tcb_t(std::shared_ptr<circle_buffer<std::shared_ptr<tcb_t>>>                active_tcbs,
+              std::optional<std::shared_ptr<circle_buffer<std::shared_ptr<tcb_t>>>> listener,
+              ipv4_port_t                                                           remote_info,
+              ipv4_port_t                                                           local_info)
             : _active_tcbs(active_tcbs),
+              _listener(listener),
               remote_info(remote_info),
               local_info(local_info),
               state(TCP_CLOSED) {}
@@ -58,6 +60,12 @@ struct tcb_t : public std::enable_shared_from_this<tcb_t> {
         void enqueue_send(raw_packet packet) {
                 send_queue.push_back(std::move(packet));
                 active_self();
+        }
+
+        void listen_finish() {
+                if (this->_listener) {
+                        _listener.value()->push_back(shared_from_this());
+                }
         }
 
         void active_self() { _active_tcbs->push_back(shared_from_this()); }
@@ -94,12 +102,8 @@ struct tcb_t : public std::enable_shared_from_this<tcb_t> {
 
                 out_tcp.ACK = 1;
 
-                if (this->state == TCP_SYN_RECEIVED) {
+                if (this->next_state == TCP_SYN_RECEIVED) {
                         out_tcp.SYN = 1;
-                }
-
-                if (this->state == TCP_FIN_WAIT_1 || this->state == TCP_LAST_ACK) {
-                        out_tcp.FIN = 1;
                 }
 
                 out_tcp.produce(out_buffer->get_pointer());
@@ -107,6 +111,9 @@ struct tcb_t : public std::enable_shared_from_this<tcb_t> {
                                            .remote_info = this->remote_info,
                                            .local_info  = this->local_info,
                                            .buffer      = std::move(out_buffer)};
+                if (this->next_state != this->state) {
+                        this->state = this->next_state;
+                }
                 return std::move(out_packet);
         }
 

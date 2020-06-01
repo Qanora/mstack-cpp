@@ -13,8 +13,7 @@ public:
         static int generate_iss() { return 0; }
 
         static bool tcp_handle_close_state(std::shared_ptr<tcb_t> in_tcb, tcp_packet_t& in_packet) {
-                tcp_header_t in_tcp;
-                in_tcp.consume(in_packet.buffer->get_pointer());
+                tcp_header_t in_tcp = tcp_header_t::consume(in_packet.buffer->get_pointer());
                 /**
                  *  If the state is CLOSED (i.e., TCB does not exist) then
                  *  all data in the incoming segment is discarded.  An incoming
@@ -113,7 +112,7 @@ public:
                         in_tcb->receive.window      = 0xFAF0;
                         in_tcb->send.next           = iss + 1;
                         in_tcb->send.unacknowledged = iss;
-                        in_tcb->state               = TCP_SYN_RECEIVED;
+                        in_tcb->next_state          = TCP_SYN_RECEIVED;
                         in_tcb->active_self();
                         DLOG(INFO) << "[SEND SYN ACK]";
                         return false;
@@ -136,8 +135,7 @@ public:
                         return false;
                 }
 
-                tcp_header_t in_tcp;
-                in_tcp.consume(in_packet.buffer->get_pointer());
+                tcp_header_t in_tcp = tcp_header_t::consume(in_packet.buffer->get_pointer());
                 // first check the ACK bit
                 if (in_tcp.ACK == 1) {
                         /**
@@ -284,11 +282,14 @@ public:
                  *      numbers may be held for later processing.
                  */
 
-                tcp_header_t in_tcp;
-                in_tcp.consume(in_packet.buffer->get_pointer());
-                uint16_t segment_length =
-                        in_packet.buffer->get_remaining_len() - in_tcp.header_length * 2;
+                tcp_header_t in_tcp = tcp_header_t::consume(in_packet.buffer->get_pointer());
+                uint16_t     segment_length =
+                        in_packet.buffer->get_remaining_len() - in_tcp.header_length * 4;
 
+                // DLOG(INFO) << "SN: " << in_tcp.seq_no << " ";
+                // DLOG(INFO) << "SL: " << segment_length << " ";
+                // DLOG(INFO) << "RW: " << in_tcb->receive.window << " ";
+                // DLOG(INFO) << "RN: " << in_tcb->receive.next;
                 switch (in_tcb->state) {
                         case TCP_SYN_RECEIVED:
                         case TCP_ESTABLISHED:
@@ -352,13 +353,12 @@ public:
                 if (in_tcb->state == TCP_SYN_SENT && tcp_handle_syn_sent(in_tcb, in_packet)) {
                         return;
                 }
-
-                tcp_header_t in_tcp;
-                in_tcp.consume(in_packet.buffer->get_pointer());
+                tcp_header_t in_tcp = tcp_header_t::consume(in_packet.buffer->get_pointer());
 
                 DLOG(INFO) << "[TCP] [PROCESS 1] " << *in_tcb;
                 // first check sequence number
                 if (!tcp_check_segment(in_tcb, in_packet)) {
+                        DLOG(INFO) << "[SEGMENT SEQ FAIL]";
                         if (!in_tcp.RST) {
                                 // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>
                                 tcp_send_ack();
@@ -462,22 +462,16 @@ public:
                                          *  LAST-ACK STATE
                                          *  TIME-WAIT STATE
                                          *
-                                         *      If the SYN is in the window it is an error, send
-                                         a
-                                         * reset, any outstanding RECEIVEs and SEND should
-                                         receive
-                                         * "reset" responses, all segment queues should be
-                                         flushed,
-                                         * the user should also receive an unsolicited general
-                                         * "connection reset" signal, enter the CLOSED state,
-                                         delete
-                                         * the TCB, and return.
+                                         *      If the SYN is in the window it is an error, send a
+                                         *      reset, any outstanding RECEIVEs and SEND should
+                                         * receive "reset" responses, all segment queues should be
+                                         * flushed, the user should also receive an unsolicited
+                                         * general "connection reset" signal, enter the CLOSED
+                                         * state, delete the TCB, and return.
                                          *
-                                         *      If the SYN is not in the window this step would
-                                         not
-                                         * be reached and an ack would have been sent in the
-                                         first
-                                         * step (sequence number check).
+                                         *      If the SYN is not in the window this step would not
+                                         *      be reached and an ack would have been sent in the
+                                         * first step (sequence number check).
                                          */
                                 case TCP_SYN_RECEIVED:
                                 case TCP_ESTABLISHED:
@@ -490,6 +484,7 @@ public:
                                         return;
                         }
                 }
+
                 // fifth check the ACK field
                 DLOG(INFO) << "[TCP] [PROCESS 5] " << *in_tcb;
                 if (in_tcp.ACK) {
@@ -497,14 +492,16 @@ public:
                                 /**
                                  *  SYN-RECEIVED STATE
                                  *      If SND.UNA =< SEG.ACK =< SND.NXT then enter ESTABLISHED
-                                 * state and continue processing. If the segment acknowledgment
-                                 is
-                                 * not acceptable, form a reset segment, <SEQ=SEG.ACK><CTL=RST>
+                                 *      state and continue processing. If the segment acknowledgment
+                                 * is not acceptable, form a reset segment, <SEQ=SEG.ACK><CTL=RST>
                                  */
                                 case TCP_SYN_RECEIVED:
                                         if (in_tcb->send.unacknowledged <= in_tcp.ack_no &&
                                             in_tcp.ack_no <= in_tcb->send.next) {
-                                                in_tcb->state = TCP_ESTABLISHED;
+                                                in_tcb->state      = TCP_ESTABLISHED;
+                                                in_tcb->next_state = TCP_ESTABLISHED;
+                                                in_tcb->listen_finish();
+                                                // in_tcb->receive.next += 1;
                                         } else {
                                                 tcp_send_rst();
                                                 return;
@@ -513,29 +510,25 @@ public:
                                 /**
                                  *  ESTABLISHED STATE
                                  *      If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <-
-                                 * SEG.ACK. Any segments on the retransmission queue which are
-                                 * thereby entirely acknowledged are removed.  Users should
-                                 receive
-                                 *      positive acknowledgments for buffers which have been SENT
-                                 * and fully acknowledged (i.e., SEND buffer should be returned
-                                 with
-                                 *      "ok" response).  If the ACK is a duplicate
-                                 *      (SEG.ACK < SND.UNA), it can be ignored.  If the ACK acks
-                                 *      something not yet sent (SEG.ACK > SND.NXT) then send an
-                                 ACK,
-                                 *      drop the segment, and return.
+                                 *      SEG.ACK. Any segments on the retransmission queue which are
+                                 *      thereby entirely acknowledged are removed.  Users should
+                                 * receive positive acknowledgments for buffers which have been SENT
+                                 *      and fully acknowledged (i.e., SEND buffer should be returned
+                                 * with "ok" response).  If the ACK is a duplicate (SEG.ACK <
+                                 * SND.UNA), it can be ignored.  If the ACK acks something not yet
+                                 * sent (SEG.ACK > SND.NXT) then send an ACK, drop the segment, and
+                                 * return.
                                  *
-                                 *      If SND.UNA < SEG.ACK =< SND.NXT, the send window should
-                                 be
+                                 *      If SND.UNA < SEG.ACK =< SND.NXT, the send window should be
                                  *      updated.  If (SND.WL1 < SEG.SEQ or (SND.WL1 = SEG.SEQ and
                                  *      SND.WL2 =< SEG.ACK)), set SND.WND <- SEG.WND, set
                                  *      SND.WL1 <- SEG.SEQ, and set SND.WL2 <- SEG.ACK.
                                  *
                                  *      Note that SND.WND is an offset from SND.UNA, that SND.WL1
                                  *      records the sequence number of the last segment used to
-                                 * update SND.WND, and that SND.WL2 records the acknowledgment
-                                 * number of the last segment used to update SND.WND.  The check
-                                 * here prevents using old segments to update the window.
+                                 *      update SND.WND, and that SND.WL2 records the acknowledgment
+                                 *      number of the last segment used to update SND.WND.  The
+                                 * check here prevents using old segments to update the window.
                                  */
                                 case TCP_ESTABLISHED:
                                 case TCP_FIN_WAIT_1:
@@ -547,38 +540,39 @@ public:
                                                 in_tcb->send.unacknowledged = in_tcp.ack_no;
                                                 // TODO: update windows
                                         }
+
                                         if (in_tcp.ack_no <
                                             in_tcb->send.unacknowledged) { /* ignore */
                                         }
+
                                         if (in_tcp.ack_no > in_tcb->send.next) {
-                                                tcp_send_ack();
+                                                in_tcb->active_self();
                                                 return;
                                         }
 
                                         /**
                                          *  FIN-WAIT-1 STATE
                                          *      In addition to the processing for the ESTABLISHED
-                                         * state, if our FIN is now acknowledged then enter
-                                         * FIN-WAIT-2 and continue processing in that state.
+                                         *      state, if our FIN is now acknowledged then enter
+                                         *      FIN-WAIT-2 and continue processing in that state.
                                          */
                                         if (in_tcb->state == TCP_FIN_WAIT_1) {
-                                                in_tcb->state = TCP_FIN_WAIT_2;
+                                                in_tcb->next_state = TCP_FIN_WAIT_2;
                                         }
 
                                         /**
                                          *  FIN-WAIT-2 STATE
                                          *      In addition to the processing for the ESTABLISHED
-                                         * state, if the retransmission queue is empty, the
-                                         user's
-                                         * CLOSE can be acknowledged ("ok") but do not delete the
-                                         * TCB.
+                                         *      state, if the retransmission queue is empty, the
+                                         * user's CLOSE can be acknowledged ("ok") but do not delete
+                                         * the TCB.
                                          */
                                         if (in_tcb->state == TCP_FIN_WAIT_2) {
+                                                // * CLOSE FINISH
                                         }
                                         /**
                                          *  CLOSE-WAIT STATE
-                                         *      Do the same processing as for the ESTABLISHED
-                                         state.
+                                         *      Do the same processing as for the ESTABLISHED state.
                                          */
 
                                         if (in_tcb->state == TCP_CLOSE_WAIT) {
@@ -586,31 +580,31 @@ public:
                                         /**
                                          *  CLOSING STATE
                                          *      In addition to the processing for the ESTABLISHED
-                                         * state, if the ACK acknowledges our FIN then enter the
-                                         * TIME-WAIT state, otherwise ignore the segment.
+                                         *      state, if the ACK acknowledges our FIN then enter
+                                         * the TIME-WAIT state, otherwise ignore the segment.
                                          */
                                         if (in_tcb->state == TCP_CLOSING) {
+                                                in_tcb->next_state = TCP_TIME_WAIT;
                                         }
                                         break;
                                 /**
                                  *  LAST-ACK STATE
                                  *      The only thing that can arrive in this state is an
-                                 *      acknowledgment of our FIN.  If our FIN is now
-                                 acknowledged,
+                                 *      acknowledgment of our FIN.  If our FIN is now  acknowledged,
                                  *      delete the TCB, enter the CLOSED state, and return.
                                  */
                                 case TCP_LAST_ACK:
-                                        in_tcb->state == TCP_CLOSED;
+                                        in_tcb->next_state = TCP_CLOSED;
                                         return;
                                 /**
                                  *  TIME-WAIT STATE
                                  *      The only thing that can arrive in this state is a
                                  *      retransmission of the remote FIN.  Acknowledge it, and
-                                 * restart the 2 MSL timeout.
+                                 *      restart the 2 MSL timeout.
                                  */
                                 case TCP_TIME_WAIT:
-                                        tcp_send_ack();
-                                        return;
+                                        in_tcb->active_self();
+                                        break;
                         }
                 }
 
@@ -646,107 +640,123 @@ public:
                                 case TCP_CLOSING:
                                 case TCP_LAST_ACK:
                                 case TCP_TIME_WAIT:
-                                        return;
+                                        break;
                         }
                 }
+                int header_len  = in_tcp.header_length * 4;
+                int segment_len = in_packet.buffer->get_remaining_len() - header_len;
 
                 DLOG(INFO) << "[TCP] [PROCESS 7] " << *in_tcb;
                 // seventh, process the segment text
-                switch (in_tcb->state) {
+                if (segment_len > 0) {
+                        switch (in_tcb->state) {
                                 /**
                                  *   ESTABLISHED STATE
                                  *   FIN-WAIT-1 STATE
                                  *   FIN-WAIT-2 STATE
                                  *
-                                 *       Once in the ESTABLISHED state, it is possible to deliver
-                                 *       segment text to user RECEIVE buffers.  Text from
-                                 segments
-                                 * can be moved into buffers until either the buffer is full or
-                                 the
-                                 * segment is empty.  If the segment empties and carries an PUSH
-                                 * flag, then the user is informed, when the buffer is returned,
-                                 * that a PUSH has been received.
+                                 *      Once in the ESTABLISHED state, it is possible to deliver
+                                 *      segment text to user RECEIVE buffers.  Text from segments
+                                 *      can be moved into buffers until either the buffer is full or
+                                 * the segment is empty.  If the segment empties and carries an PUSH
+                                 *      flag, then the user is informed, when the buffer is
+                                 * returned, that a PUSH has been received.
                                  *
-                                 *       When the TCP takes responsibility for delivering the
-                                 data
-                                 * to the user it must also acknowledge the receipt of the data.
+                                 *      When the TCP takes responsibility for delivering the data
+                                 *      to the user it must also acknowledge the receipt of the
+                                 * data.
                                  *
-                                 *       Once the TCP takes responsibility for the data it
-                                 advances
-                                 *       RCV.NXT over the data accepted, and adjusts RCV.WND as
-                                 *       apporopriate to the current buffer availability.  The
-                                 total
-                                 * of RCV.NXT and RCV.WND should not be reduced.
+                                 *      Once the TCP takes responsibility for the data it advances
+                                 *      RCV.NXT over the data accepted, and adjusts RCV.WND as
+                                 *      apporopriate to the current buffer availability.  The total
+                                 *      of RCV.NXT and RCV.WND should not be reduced.
                                  *
-                                 *       Please note the window management suggestions in
-                                 * section 3.7.
+                                 *      Please note the window management suggestions in
+                                 *              section 3.7.
                                  *
-                                 *       Send an acknowledgment of the form:
+                                 *      Send an acknowledgment of the form:
                                  *
-                                 *       <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>
+                                 *              <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>
                                  *
-                                 *       This acknowledgment should be piggybacked on a segment
-                                 * being transmitted if possible without incurring undue delay
+                                 *      This acknowledgment should be piggybacked on a segment
+                                 *      being transmitted if possible without incurring undue delay
                                  */
-                        case TCP_ESTABLISHED:
-                        case TCP_FIN_WAIT_1:
-                        case TCP_FIN_WAIT_2:
+                                case TCP_ESTABLISHED:
+                                case TCP_FIN_WAIT_1:
+                                case TCP_FIN_WAIT_2: {
+                                        DLOG(INFO) << "[RECEIVE DATA] " << segment_len;
+                                        in_tcb->receive.next += segment_len;
+                                        std::unique_ptr<base_packet> out_buffer =
+                                                std::make_unique<base_packet>(segment_len);
+                                        in_packet.buffer->export_payload(out_buffer->get_pointer(),
+                                                                         header_len);
+                                        raw_packet r_packet = {.buffer = std::move(out_buffer)};
+                                        in_tcb->receive_queue.push_back(std::move(r_packet));
+                                        in_tcb->active_self();
+                                        break;
+                                }
                                 /**
                                  *  CLOSE-WAIT STATE
                                  *  CLOSING STATE
                                  *  LAST-ACK STATE
                                  *  TIME-WAIT STATE
                                  *      This should not occur, since a FIN has been received from
-                                 * the remote side.  Ignore the segment text.
+                                 *      the remote side.  Ignore the segment text.
                                  */
-                        case TCP_CLOSE_WAIT:
-                        case TCP_CLOSING:
-                        case TCP_LAST_ACK:
-                        case TCP_TIME_WAIT:
-                                return;
+                                case TCP_CLOSE_WAIT:
+                                case TCP_CLOSING:
+                                case TCP_LAST_ACK:
+                                case TCP_TIME_WAIT:
+                                        break;
+                        }
                 }
-
                 DLOG(INFO) << "[TCP] [PROCESS 8] " << *in_tcb;
                 // eighth, check the FIN bit
                 if (in_tcp.FIN == 1) {
                         switch (in_tcb->state) {
-                                        /**
-                                         *  Do not process the FIN if the state is CLOSED, LISTEN
-                                         or
-                                         * SYN-SENT since the SEG.SEQ cannot be validated; drop
-                                         the
-                                         * segment and return.
-                                         *
-                                         *  If the FIN bit is set, signal the user "connection
-                                         * closing" and return any pending RECEIVEs with same
-                                         * message, advance RCV.NXT over the FIN, and send an
-                                         * acknowledgment for the FIN.  Note that FIN implies
-                                         PUSH
-                                         * for any segment text not yet delivered to the user.
-                                         */
+                                /**
+                                 *      Do not process the FIN if the state is CLOSED, LISTEN or
+                                 *      SYN-SENT since the SEG.SEQ cannot be validated; drop the
+                                 *      segment and return.
+                                 *
+                                 *      If the FIN bit is set, signal the user "connection
+                                 *      closing" and return any pending RECEIVEs with same
+                                 *      message, advance RCV.NXT over the FIN, and send an
+                                 *      acknowledgment for the FIN.  Note that FIN implies PUSH
+                                 *      for any segment text not yet delivered to the user.
+                                 */
 
-                                        /**
-                                         *  SYN-RECEIVED STATE
-                                         *  ESTABLISHED STATE
-                                         *      Enter the CLOSE-WAIT state.
-                                         */
+                                /**
+                                 *      SYN-RECEIVED STATE
+                                 *      ESTABLISHED STATE
+                                 *              Enter the CLOSE-WAIT state.
+                                 */
                                 case TCP_SYN_RECEIVED:
                                 case TCP_ESTABLISHED:
+                                        in_tcb->receive.next += 1;
+                                        in_tcb->next_state = TCP_CLOSE_WAIT;
+                                        in_tcb->active_self();
                                         /**
                                          *  FIN-WAIT-1 STATE
-                                         *      If our FIN has been ACKed (perhaps in this
-                                         segment),
-                                         * then enter TIME-WAIT, start the time-wait timer, turn
-                                         off
-                                         * the other timers; otherwise enter the CLOSING state.
+                                         *      If our FIN has been ACKed (perhaps in this segment),
+                                         *      then enter TIME-WAIT, start the time-wait timer,
+                                         * turn off the other timers; otherwise enter the CLOSING
+                                         * state.
                                          */
                                 case TCP_FIN_WAIT_1:
+                                        if (in_tcb->next_state == TCP_FIN_WAIT_2) {
+                                                in_tcb->next_state = TCP_TIME_WAIT;
+                                        } else {
+                                                in_tcb->next_state = TCP_CLOSING;
+                                        }
                                         /**
                                          *  FIN-WAIT-2 STATE
                                          *      Enter the TIME-WAIT state.  Start the time-wait
                                          * timer, turn off the other timers.
                                          */
                                 case TCP_FIN_WAIT_2:
+                                        // * start time_wait
+                                        in_tcb->next_state = TCP_TIME_WAIT;
                                         /**
                                          *  CLOSE-WAIT STATE
                                          *      Remain in the CLOSE-WAIT state.

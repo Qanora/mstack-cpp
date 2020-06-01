@@ -14,6 +14,10 @@ constexpr static int TCP_CLOSING      = 0x18;
 constexpr static int TCP_LAST_ACK     = 0x19;
 constexpr static int TCP_TIME_WAIT    = 0x20;
 
+constexpr static int SOCKET_UNCONNECTED = 0x21;
+constexpr static int SOCKET_CONNECTING  = 0x22;
+constexpr static int SOCKET_CONNECTED   = 0x23;
+
 std::string state_to_string(int state) {
         switch (state) {
                 case TCP_CLOSED:

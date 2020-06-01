@@ -18,7 +18,11 @@ public:
         push_back(PacketType packet) {
                 packets.push(std::move(packet));
         }
-
+        
+        int 
+        size(){
+                return packets.size();
+        }
         std::optional<PacketType>
         pop_front() {
                 if (empty()) {
